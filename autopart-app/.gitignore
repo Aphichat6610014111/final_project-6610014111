@@ -1,0 +1,6 @@
+node_modules/
+
+# Expo/React Native cache
+/.expo/
+android/
+ios/
