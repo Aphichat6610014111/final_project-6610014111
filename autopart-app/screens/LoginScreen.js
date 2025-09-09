@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AuthContext from '../context/AuthContext';
 import axios from 'axios';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import theme from '../theme';
 
 const { width, height } = Dimensions.get('window');
 
@@ -27,6 +28,10 @@ const LoginScreen = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState('error');
+  const [showAlert, setShowAlert] = useState(false);
   
   const { login } = useContext(AuthContext);
   
@@ -50,12 +55,12 @@ const LoginScreen = ({ navigation }) => {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกอีเมลและรหัสผ่าน');
+      showCustomAlert('ข้อผิดพลาด', 'กรุณากรอกอีเมลและรหัสผ่าน');
       return;
     }
 
     if (!email.includes('@')) {
-      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกอีเมลที่ถูกต้อง');
+      showCustomAlert('ข้อผิดพลาด', 'กรุณากรอกอีเมลที่ถูกต้อง');
       return;
     }
 
@@ -70,18 +75,33 @@ const LoginScreen = ({ navigation }) => {
       const response = await axios.post('http://localhost:5000/api/auth/login', payload);
       const { token, user } = response.data.data;
       
-      // Save auth state then immediately navigate to Home
+      // Save auth state then navigate into the Main tabs and open the Home tab.
+      // MainTabs selects the actual component (AdminDashboard or EmployeeDashboard)
+      // based on user.role stored by AuthContext.
       try {
         await login(user, token);
       } catch (e) {
         console.log('AuthContext.login error:', e);
       }
 
-      // Immediately replace stack with Main (tabs) so user can't go back to Login
+      // Reset navigation so user can't go back to Login. Navigate to nested Home tab.
       try {
-        navigation.replace('Main');
+        navigation.reset({
+          index: 0,
+          routes: [
+            {
+              name: 'Main',
+              params: { screen: 'Home' },
+            },
+          ],
+        });
       } catch (e) {
-        navigation.navigate('Main');
+        // Fallback: replace to Main
+        try {
+          navigation.replace('Main');
+        } catch (err) {
+          navigation.navigate('Main');
+        }
       }
     } catch (error) {
       // log for debugging in Metro/console
@@ -93,10 +113,20 @@ const LoginScreen = ({ navigation }) => {
         message = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบหรือสมัครสมาชิก';
       }
 
-      Alert.alert('เข้าสู่ระบบไม่สำเร็จ', message);
+      showCustomAlert('เข้าสู่ระบบไม่สำเร็จ', message);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Function แสดง Custom Alert (ใช้กับหน้า Login เช่นกัน)
+  const showCustomAlert = (title, message, type = 'error') => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertType(type);
+    setShowAlert(true);
+    // Fallback native alert for immediate visibility
+    Alert.alert(title, message);
   };
 
   return (
@@ -119,6 +149,12 @@ const LoginScreen = ({ navigation }) => {
               transform: [{ translateY: slideAnim }],
             }
           ]}>
+            {showAlert && (
+              <View style={[styles.alertBox, alertType === 'error' ? styles.alertError : styles.alertSuccess]}>
+                <Text style={styles.alertTitle}>{alertTitle}</Text>
+                <Text style={styles.alertMessage}>{alertMessage}</Text>
+              </View>
+            )}
             {/* Logo Section */}
             <View style={styles.logoSection}>
               <View style={styles.logoContainer}>
@@ -250,7 +286,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  backgroundColor: 'rgba(255, 255, 255, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
@@ -258,7 +294,7 @@ const styles = StyleSheet.create({
   appTitle: {
     fontSize: 36,
     fontWeight: '300',
-    color: '#fff',
+  color: theme.colors.surface,
     letterSpacing: 2,
   },
   formContainer: {
@@ -347,6 +383,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  alertBox: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: theme.space.md,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface,
+    ...theme.shadow.card,
+  },
+  alertError: {
+    borderColor: '#FEE2E2',
+    borderWidth: 1,
+  },
+  alertSuccess: {
+    borderColor: '#DCFCE7',
+    borderWidth: 1,
+  },
+  alertTitle: { fontWeight: '800', color: theme.colors.text, marginBottom: 6, fontSize: theme.typography.body },
+  alertMessage: { color: theme.colors.muted, fontSize: theme.typography.small },
 });
 
 export default LoginScreen;

@@ -9,10 +9,13 @@ import AuthContext from '../context/AuthContext';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import HomeScreen from '../screens/HomeScreen';
+import AdminDashboard from '../screens/AdminDashboard';
 import ProductList from '../screens/Products/ProductList';
 import ProductForm from '../screens/Products/ProductForm';
+import AddToCartScreen from '../screens/Products/AddToCartScreen';
 // reports removed for simplified auto-parts app
 import ProfileScreen from '../screens/ProfileScreen';
+import TransactionScreen from '../screens/Transactions/TransactionScreen';
 import Fulfillment from '../screens/Services/Fulfillment';
 import Distribution from '../screens/Services/Distribution';
 import Transport from '../screens/Services/Transport';
@@ -26,6 +29,11 @@ const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function MainTabs() {
+  const { user } = useContext(AuthContext);
+
+  // Determine which Home/dashboard to show based on role
+  const HomeComponent = (user && user.role === 'admin') ? AdminDashboard : HomeScreen;
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -36,14 +44,15 @@ function MainTabs() {
           else if (route.name === 'Profile') iconName = 'person';
           return <Icon name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: 'gray',
+  tabBarActiveTintColor: '#ff6b6b',
+  tabBarInactiveTintColor: 'rgba(255,255,255,0.7)',
+  tabBarStyle: { backgroundColor: '#2b0000', borderTopColor: 'rgba(255,255,255,0.06)' },
   headerShown: false,
       })}
     >
-  <Tab.Screen name="Home" component={HomeScreen} />
-  <Tab.Screen name="Products" component={ProductList} />
-  <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Home" component={HomeComponent} />
+      <Tab.Screen name="Products" component={ProductList} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }
@@ -67,6 +76,8 @@ const AppNavigator = () => {
           <>
             <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen name="ProductForm" component={ProductForm} />
+            <Stack.Screen name="AddToCart" component={AddToCartScreen} />
+            <Stack.Screen name="Transaction" component={TransactionScreen} />
             <Stack.Screen name="Fulfillment" component={Fulfillment} />
             <Stack.Screen name="Distribution" component={Distribution} />
             <Stack.Screen name="Transport" component={Transport} />

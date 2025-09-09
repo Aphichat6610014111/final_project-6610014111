@@ -6,15 +6,18 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  ImageBackground,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AuthContext from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { Modal } from 'react-native';
 
 const ProfileScreen = () => {
   const { user, logout } = useContext(AuthContext);
   const navigation = useNavigation();
+  const [showLogoutOptions, setShowLogoutOptions] = React.useState(false);
 
   const handleLogout = async () => {
     console.log('Logout clicked');
@@ -32,8 +35,19 @@ const ProfileScreen = () => {
   };
 
   const confirmLogout = () => {
-    console.log('confirmLogout called');
-    handleLogout(); // เรียก logout ทันทีไม่ต้องถาม
+  // Try modal, but also show native Alert as a reliable fallback
+  console.log('Opening logout options modal (and native Alert fallback)');
+  setShowLogoutOptions(true);
+
+  Alert.alert(
+    'ยืนยันการออกจากระบบ',
+    'คุณต้องการออกจากระบบใช่หรือไม่?',
+    [
+      { text: 'ยกเลิก', style: 'cancel', onPress: () => console.log('Logout cancelled (alert)') },
+      { text: 'ตกลง', style: 'destructive', onPress: async () => { console.log('Logout confirmed (alert)'); await handleLogout(); } },
+    ],
+    { cancelable: true }
+  );
   };
 
   const menuItems = [
@@ -48,11 +62,12 @@ const ProfileScreen = () => {
 
   return (
     <ScrollView style={styles.container}>
-      <LinearGradient
-        colors={['#dc2626', '#7f1d1d', '#000000']}
-        style={styles.header}
-      >
-        <View style={styles.profileSection}>
+      <ImageBackground
+            source={require('../assets/FooterCar.jpg')}
+            style={styles.header}
+            resizeMode="cover"
+          >
+          <View style={styles.profileSection}>
           <View style={styles.profileIcon}>
             <Icon name="person" size={50} color="#fff" />
           </View>
@@ -64,15 +79,15 @@ const ProfileScreen = () => {
               <Text style={styles.statusText}>ยืนยันแล้ว</Text>
             </View>
           </View>
-        </View>
-      </LinearGradient>
+  </View>
+    </ImageBackground>
 
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>
           <LinearGradient
-            colors={['#1a1a1a', '#2a2a2a']}
-            style={styles.statCardGradient}
-          >
+              colors={['#000000', '#2b0000']}
+              style={styles.statCardGradient}
+            >
             <Icon name="build" size={28} color="#dc2626" />
             <Text style={styles.statNumber}>24</Text>
             <Text style={styles.statLabel}>อะไหล่ในสต็อก</Text>
@@ -80,9 +95,9 @@ const ProfileScreen = () => {
         </View>
         <View style={styles.statCard}>
           <LinearGradient
-            colors={['#1a1a1a', '#2a2a2a']}
-            style={styles.statCardGradient}
-          >
+              colors={['#000000', '#2b0000']}
+              style={styles.statCardGradient}
+            >
             <Icon name="shopping-cart" size={28} color="#34C759" />
             <Text style={styles.statNumber}>12</Text>
             <Text style={styles.statLabel}>คำสั่งซื้อ</Text>
@@ -90,9 +105,9 @@ const ProfileScreen = () => {
         </View>
         <View style={styles.statCard}>
           <LinearGradient
-            colors={['#1a1a1a', '#2a2a2a']}
-            style={styles.statCardGradient}
-          >
+              colors={['#000000', '#2b0000']}
+              style={styles.statCardGradient}
+            >
             <Icon name="star" size={28} color="#FFD700" />
             <Text style={styles.statNumber}>4.8</Text>
             <Text style={styles.statLabel}>คะแนนรีวิว</Text>
@@ -123,10 +138,35 @@ const ProfileScreen = () => {
                 {item.title}
               </Text>
             </View>
-            <Icon name="chevron-right" size={20} color="#666" />
+            <Icon name="chevron-right" size={20} color="#e6e6e6" />
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Logout Options Modal */}
+      <Modal
+        visible={showLogoutOptions}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowLogoutOptions(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>ยืนยันการออกจากระบบ</Text>
+            <Text style={styles.modalText}>คุณต้องการออกจากระบบใช่หรือไม่?</Text>
+
+            <View style={styles.modalButtonsRow}>
+              <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => { console.log('Logout cancelled'); setShowLogoutOptions(false); }}>
+                <Text style={styles.cancelButtonText}>ยกเลิก</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.modalButton, styles.logoutButton]} onPress={async () => { console.log('Logout confirmed'); setShowLogoutOptions(false); await handleLogout(); }}>
+                <Text style={styles.logoutButtonText}>ตกลง</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
@@ -215,13 +255,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   menuContainer: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: 'rgba(255,255,255,0.03)',
     marginHorizontal: 20,
     borderRadius: 16,
     marginTop: 20,
     marginBottom: 30,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
   menuSectionTitle: {
     fontSize: 18,
@@ -238,8 +278,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
   },
+  modalOverlay: {
+    flex: 1,
+  backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '85%',
+    backgroundColor: '#111',
+    padding: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  modalTitle: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 8 },
+  modalText: { color: 'rgba(255,255,255,0.8)', marginBottom: 16 },
+  modalButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end' },
+  modalButton: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, marginLeft: 8 },
+  cancelButton: { backgroundColor: 'rgba(255,255,255,0.06)' },
+  cancelButtonText: { color: '#fff' },
+  logoutButton: { backgroundColor: '#FF4757' },
+  logoutButtonText: { color: '#fff', fontWeight: '700' },
   lastMenuItem: {
     borderBottomWidth: 0,
     paddingBottom: 20,

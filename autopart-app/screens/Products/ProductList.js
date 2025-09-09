@@ -352,7 +352,11 @@ const ProductList = ({ navigation }) => {
     
     return (
       // grid card for Wix-like gallery
-      <View style={styles.gridCard}>
+      <TouchableOpacity 
+        style={styles.gridCard}
+        onPress={() => navigation.navigate('ProductForm', { product: item })}
+        activeOpacity={0.8}
+      >
         <View style={styles.mediaWrap}>
           <Image
             source={getImageSource(item)}
@@ -389,12 +393,15 @@ const ProductList = ({ navigation }) => {
               <Text style={styles.reviewsText}>{item.reviewsCount ? ` ${item.reviewsCount}` : ''}</Text>
             </View>
 
-            <TouchableOpacity style={styles.addToCart} onPress={() => Alert.alert('Add to cart', `${item.name} ถูกเพิ่มลงตะกร้า (placeholder)`)}>
+            <TouchableOpacity 
+              style={styles.addToCart} 
+              onPress={() => navigation.navigate('AddToCart', { product: item })}
+            >
               <Text style={styles.addToCartText}>Add to Cart</Text>
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -669,6 +676,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  testButton: {
+    backgroundColor: '#34C759',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginRight: 10,
+    shadowColor: '#34C759',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  testButtonText: {
+    color: '#fff',
+    fontWeight: '700',
   },
   searchContainer: {
     flexDirection: 'row',

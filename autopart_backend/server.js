@@ -12,6 +12,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const path = require('path');
+
+// Serve static images from ./images if present
+app.use('/images', express.static(path.join(__dirname, 'images')));
+
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/autopart_db', {
   useNewUrlParser: true,
@@ -105,6 +110,25 @@ const productSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const Product = mongoose.model('Product', productSchema);
+
+// Review Schema
+const reviewSchema = new mongoose.Schema({
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  author: { type: String, trim: true },
+  rating: { type: Number, min: 0, max: 5, required: true },
+  title: { type: String, trim: true },
+  comment: { type: String, trim: true },
+  helpfulCount: { type: Number, default: 0 },
+  replies: [{
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    author: { type: String, trim: true },
+    comment: { type: String, trim: true },
+    createdAt: { type: Date, default: Date.now }
+  }]
+}, { timestamps: true });
+
+const Review = mongoose.model('Review', reviewSchema);
 
 // Transaction Schema
 const transactionSchema = new mongoose.Schema({
@@ -571,27 +595,161 @@ app.get('/api/products', authenticateToken, async (req, res) => {
 });
 
 // Get product by ID
-app.get('/api/products/:id', authenticateToken, async (req, res) => {
+// Public get product by ID (returns product details for storefront)
+app.get('/api/products/:id', async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
 
     if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: 'Product not found'
-      });
+      return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
-    res.json({
-      success: true,
-      data: { product }
-    });
+    res.json({ success: true, product });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch product',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch product', error: error.message });
+  }
+});
+
+// Get reviews for a product (public)
+app.get('/api/products/:id/reviews', async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const reviews = await Review.find({ productId }).sort({ createdAt: -1 }).limit(100);
+    res.json({ success: true, reviews });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch reviews', error: error.message });
+  }
+});
+
+// Post a review for a product (public)
+app.post('/api/products/:id/reviews', async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const { rating, comment, title, name } = req.body;
+    // if authenticated, prefer user info, otherwise accept provided name or fall back to Anonymous
+    const author = (req.user && req.user.name) || name || 'Anonymous';
+
+    // simple validation
+    if (typeof rating === 'undefined' || !comment) {
+      return res.status(400).json({ success: false, message: 'Rating and comment required' });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+
+    const userId = req.user ? req.user._id : null;
+    const review = new Review({ productId, userId, author, rating, title, comment });
+    await review.save();
+
+    // update product aggregate
+    // recompute average rating and count
+    const agg = await Review.aggregate([
+      { $match: { productId: product._id } },
+      { $group: { _id: '$productId', avg: { $avg: '$rating' }, count: { $sum: 1 } } }
+    ]);
+    if (agg && agg[0]) {
+      product.rating = agg[0].avg;
+      product.reviewsCount = agg[0].count;
+    } else {
+      product.rating = rating;
+      product.reviewsCount = (product.reviewsCount || 0) + 1;
+    }
+    await product.save();
+
+    res.status(201).json({ success: true, message: 'Review submitted', review });
+  } catch (error) {
+    console.error('post review error', error);
+    res.status(500).json({ success: false, message: 'Failed to post review', error: error.message });
+  }
+});
+
+// Post a reply to a review (public)
+app.post('/api/products/:productId/reviews/:reviewId/replies', async (req, res) => {
+  try {
+    const { comment, name } = req.body;
+    const { productId, reviewId } = req.params;
+    if (!comment) return res.status(400).json({ success: false, message: 'Reply comment required' });
+
+    const review = await Review.findOne({ _id: reviewId, productId });
+    if (!review) return res.status(404).json({ success: false, message: 'Review not found' });
+
+    const userId = req.user ? req.user._id : null;
+    const author = (req.user && req.user.name) || name || 'Anonymous';
+
+    review.replies.push({ userId, author, comment });
+    await review.save();
+
+    const newReply = review.replies[review.replies.length - 1];
+    res.status(201).json({ success: true, reply: newReply });
+  } catch (error) {
+    console.error('post reply error', error);
+    res.status(500).json({ success: false, message: 'Failed to post reply', error: error.message });
+  }
+});
+
+// Increment helpful/like for a review (public)
+app.post('/api/products/:productId/reviews/:reviewId/helpful', async (req, res) => {
+  try {
+    const { productId, reviewId } = req.params;
+    // validate ids to avoid Mongoose CastError
+    if (!mongoose.Types.ObjectId.isValid(productId) || !mongoose.Types.ObjectId.isValid(reviewId)) {
+      return res.status(400).json({ success: false, message: 'Invalid productId or reviewId' });
+    }
+    const review = await Review.findOne({ _id: reviewId, productId });
+    if (!review) return res.status(404).json({ success: false, message: 'Review not found' });
+
+    review.helpfulCount = (review.helpfulCount || 0) + 1;
+    await review.save();
+
+    res.json({ success: true, helpfulCount: review.helpfulCount });
+  } catch (error) {
+    console.error('helpful increment error', error);
+    res.status(500).json({ success: false, message: 'Failed to update helpful count', error: error.message });
+  }
+});
+
+// Delete a review (author or admin)
+app.delete('/api/products/:productId/reviews/:reviewId', authenticateToken, async (req, res) => {
+  try {
+    const { productId: productIdParam, reviewId } = req.params;
+    // find by review id first (more tolerant if caller passed wrong productId param)
+    const review = await Review.findById(reviewId);
+    if (!review) return res.status(404).json({ success: false, message: 'Review not found' });
+
+    // if productId param doesn't match the review, log a note but continue using the review's productId
+    const actualProductId = (review.productId || '').toString();
+    if (productIdParam && productIdParam.toString() !== actualProductId) {
+      console.warn(`ProductId param mismatch for delete: param=${productIdParam} review.productId=${actualProductId}`);
+    }
+
+    // allow only author or admin to delete
+    const isAuthor = review.userId && req.user && review.userId.toString() === req.user._id.toString();
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (!isAuthor && !isAdmin) return res.status(403).json({ success: false, message: 'Not authorized to delete this review' });
+
+    await Review.deleteOne({ _id: reviewId });
+
+    // recompute product aggregates (rating and count) using actualProductId
+    const agg = await Review.aggregate([
+      { $match: { productId: mongoose.Types.ObjectId(actualProductId) } },
+      { $group: { _id: '$productId', avg: { $avg: '$rating' }, count: { $sum: 1 } } }
+    ]);
+    const product = await Product.findById(actualProductId);
+    if (product) {
+      if (agg && agg[0]) {
+        product.rating = agg[0].avg;
+        product.reviewsCount = agg[0].count;
+      } else {
+        product.rating = 0;
+        product.reviewsCount = 0;
+      }
+      await product.save();
+    }
+
+    res.json({ success: true, message: 'Review deleted' });
+  } catch (error) {
+    console.error('delete review error', error);
+    res.status(500).json({ success: false, message: 'Failed to delete review', error: error.message });
   }
 });
 

@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 export default function Footer({ navigation }) {
   return (
     <LinearGradient
-      colors={['#dc2626', '#7f1d1d', '#000000']}
+      colors={['#000000', '#2b0000', '#3d0c0c']}
       style={styles.footer}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
@@ -48,14 +48,14 @@ const styles = StyleSheet.create({
   },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 18 },
   col: { flex: 1, paddingHorizontal: 12 },
-  brand: { fontSize: 20, fontWeight: '700', marginBottom: 6, color: '#fef2f2', fontFamily: 'Poppins_600SemiBold' },
-  desc: { fontSize: 13, color: '#fecaca', marginTop: 4, lineHeight: 18, fontFamily: 'Poppins_300Light' },
-  heading: { fontSize: 15, fontWeight: '600', marginBottom: 8, color: '#fef2f2', fontFamily: 'Poppins_600SemiBold' },
-  link: { fontSize: 13, color: '#fecaca', marginBottom: 6, fontFamily: 'Poppins_400Regular' },
+  brand: { fontSize: 20, fontWeight: '700', marginBottom: 6, color: '#ffffff', fontFamily: 'Poppins_600SemiBold' },
+  desc: { fontSize: 13, color: '#ffd6d6', marginTop: 4, lineHeight: 18, fontFamily: 'Poppins_300Light' },
+  heading: { fontSize: 15, fontWeight: '600', marginBottom: 8, color: '#ffffff', fontFamily: 'Poppins_600SemiBold' },
+  link: { fontSize: 13, color: '#ffd6d6', marginBottom: 6, fontFamily: 'Poppins_400Regular' },
   footerCTA: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  ctaTitle: { fontSize: 14, color: '#fef2f2', fontFamily: 'Poppins_600SemiBold' },
+  ctaTitle: { fontSize: 14, color: '#ffffff', fontFamily: 'Poppins_600SemiBold' },
   ctaButton: { backgroundColor: '#dc2626', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 },
   ctaButtonText: { color: '#fff', fontWeight: '600', fontFamily: 'Poppins_600SemiBold' },
   bottomRow: { marginTop: 16, alignItems: 'center' },
-  copy: { color: '#fecaca', fontSize: 12, fontFamily: 'Poppins_300Light' },
+  copy: { color: '#ffd6d6', fontSize: 12, fontFamily: 'Poppins_300Light' },
 });

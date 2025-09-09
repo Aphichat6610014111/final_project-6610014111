@@ -17,6 +17,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import theme from '../theme';
 
 const { width, height } = Dimensions.get('window');
 
@@ -27,6 +28,11 @@ const RegisterScreen = ({ navigation }) => {
     password: '',
     confirmPassword: '',
   });
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState('error');
+  const [showAlert, setShowAlert] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -54,74 +60,95 @@ const RegisterScreen = ({ navigation }) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const validateForm = () => {
-    const { username, email, password, confirmPassword } = formData;
-    
-    if (!username.trim()) {
-      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกชื่อผู้ใช้');
-      return false;
-    }
-    if (username.length < 3) {
-      Alert.alert('ข้อผิดพลาด', 'ชื่อผู้ใช้ต้องมีอย่างน้อย 3 ตัวอักษร');
-      return false;
-    }
-    if (!email.trim()) {
-      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกอีเมล');
-      return false;
-    }
-    if (!email.includes('@')) {
-      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกอีเมลที่ถูกต้อง');
-      return false;
-    }
-    if (!password) {
-      Alert.alert('ข้อผิดพลาด', 'กรุณากรอกรหัสผ่าน');
-      return false;
-    }
-    if (password.length < 6) {
-      Alert.alert('ข้อผิดพลาด', 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
-      return false;
-    }
-    if (password !== confirmPassword) {
-      Alert.alert('ข้อผิดพลาด', 'รหัสผ่านไม่ตรงกัน');
-      return false;
-    }
-    
-    return true;
+  // Function สำหรับแสดง Custom Alert
+  const showCustomAlert = (title, message, type = 'error') => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertType(type);
+    setShowAlert(true);
+    // Fallback to native alert for immediate feedback
+    Alert.alert(title, message);
   };
 
   const handleRegister = async () => {
-    if (!validateForm()) return;
+    const username = formData.username || '';
+    const password = formData.password || '';
+    const confirmPassword = formData.confirmPassword || '';
+    const name = formData.username || '';
 
+    console.log('Register attempt:', { 
+      username: username.trim(), 
+      password: password.trim(), 
+      name: name.trim(),
+      confirmPassword: confirmPassword.trim()
+    });
+    
+    // ตรวจสอบว่ากรอกข้อมูลครบหรือไม่
+    if (!username.trim() || !password.trim() || !name.trim()) {
+      console.log('Validation failed: Missing required fields');
+      showCustomAlert('ข้อผิดพลาด', 'กรุณากรอกข้อมูลให้ครบทุกช่อง');
+      return;
+    }
+
+    // ตรวจสอบความยาว username
+    if (username.trim().length < 3) {
+      console.log('Validation failed: Username too short');
+      showCustomAlert('ข้อผิดพลาด', 'Username ต้องมีอย่างน้อย 3 ตัวอักษร');
+      return;
+    }
+
+    // ตรวจสอบความยาว name
+    if (name.trim().length < 2) {
+      console.log('Validation failed: Name too short');
+      showCustomAlert('ข้อผิดพลาด', 'ชื่อต้องมีอย่างน้อย 2 ตัวอักษร');
+      return;
+    }
+
+    // ตรวจสอบรหัสผ่าน
+    if (password.length < 6) {
+      console.log('Validation failed: Password too short');
+      showCustomAlert('ข้อผิดพลาด', 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+      return;
+    }
+
+    // ตรวจสอบรหัสผ่านตรงกันหรือไม่
+    if (password !== confirmPassword) {
+      console.log('Validation failed: Password mismatch');
+      showCustomAlert('ข้อผิดพลาด', 'รหัสผ่านไม่ตรงกัน');
+      return;
+    }
+
+    console.log('Validation passed, proceeding with registration');
     setLoading(true);
+    
     try {
       const payload = {
-        name: formData.username.trim(),
+        name: name.trim(),
         email: formData.email.trim().toLowerCase(),
-        password: formData.password,
+        password: password,
       };
 
-      await axios.post('http://localhost:5000/api/auth/register', payload);
-      
-      // แสดง loading 3 วินาที
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      Alert.alert(
-        'สมัครสมาชิกสำเร็จ',
-        'ยินดีต้อนรับ! กรุณาเข้าสู่ระบบด้วยบัญชีใหม่ของคุณ',
-        [
-          {
-            text: 'ตกลง',
-            onPress: () => navigation.goBack(),
-          },
-        ]
-      );
-    } catch (error) {
-      Alert.alert(
-        'สมัครสมาชิกไม่สำเร็จ',
-        error.response?.data?.message || 'เกิดข้อผิดพลาดในการสมัครสมาชิก'
-      );
-    } finally {
+      const response = await axios.post('http://localhost:5000/api/auth/register', payload);
       setLoading(false);
+
+      const result = response.data || { success: true };
+      if (result.success) {
+        setShowSuccess(true);
+        // รีเซ็ตฟอร์ม
+        setFormData({ username: '', email: '', password: '', confirmPassword: '' });
+        
+        // แสดงข้อความสำเร็จ 3 วินาที แล้วกลับไปหน้า Login
+        setTimeout(() => {
+          setShowSuccess(false);
+          navigation.goBack();
+        }, 3000);
+      } else {
+        showCustomAlert('สมัครสมาชิกไม่สำเร็จ', result.message || 'เกิดข้อผิดพลาดในการสมัครสมาชิก');
+      }
+    } catch (error) {
+      setLoading(false);
+      console.error('Register error:', error);
+      showCustomAlert('ข้อผิดพลาด', 'เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่');
     }
   };
 
@@ -155,6 +182,20 @@ const RegisterScreen = ({ navigation }) => {
               transform: [{ translateY: slideAnim }],
             }
           ]}>
+            {/* Inline alert / success banner */}
+            {showAlert && (
+              <View style={[styles.alertBox, alertType === 'error' ? styles.alertError : styles.alertSuccess]}>
+                <Text style={styles.alertTitle}>{alertTitle}</Text>
+                <Text style={styles.alertMessage}>{alertMessage}</Text>
+              </View>
+            )}
+
+            {showSuccess && (
+              <View style={[styles.alertBox, styles.alertSuccess]}>
+                <Text style={styles.alertTitle}>สมัครสมาชิกสำเร็จ</Text>
+                <Text style={styles.alertMessage}>กำลังกลับไปยังหน้าล็อกอิน...</Text>
+              </View>
+            )}
             {/* Header Section */}
             <View style={styles.headerSection}>
               <TouchableOpacity 
@@ -370,7 +411,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  backgroundColor: 'rgba(255, 255, 255, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
@@ -378,7 +419,7 @@ const styles = StyleSheet.create({
   appTitle: {
     fontSize: 36,
     fontWeight: '300',
-    color: '#fff',
+  color: theme.colors.surface,
     letterSpacing: 2,
   },
   formContainer: {
@@ -472,6 +513,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 18,
     paddingHorizontal: 20,
+    backgroundColor: theme.colors.primary,
   },
   registerButtonText: {
     color: '#fff',
@@ -492,6 +534,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  alertBox: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: theme.space.md,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface,
+    ...theme.shadow.card,
+  },
+  alertError: {
+    borderColor: '#FEE2E2',
+    borderWidth: 1,
+  },
+  alertSuccess: {
+    borderColor: '#DCFCE7',
+    borderWidth: 1,
+  },
+  alertTitle: { fontWeight: '800', color: theme.colors.text, marginBottom: 6, fontSize: theme.typography.body },
+  alertMessage: { color: theme.colors.muted, fontSize: theme.typography.small },
 });
 
 export default RegisterScreen;

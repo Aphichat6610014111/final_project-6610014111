@@ -33,6 +33,13 @@ const assetsList = [
   require('./Timing Belt.jpg'),
   require('./Turbocharger.jpg'),
   require('./autoparts-logo.png'), // newly added logo
+  require('./Car-Body.jpg'), // background image added
+  require('./Wheels and Rims.jpg'),
+  require('./Engine.jpg'),
+  require('./Vehicle Body Parts.jpg'),
+  require('./Accessories.jpg'),
+  require('./FooterCar.jpg'), // footer background image
+  require('./Lamps2.jpg'), // duplicate entry to test handling
 ];
 
 const makeKey = (filename) => filename.replace(/\.[^/.]+$/, '').toLowerCase();
@@ -71,6 +78,13 @@ const filenames = [
   'Timing Belt.jpg',
   'Turbocharger.jpg',
   'autoparts-logo.png', // newly added logo filename
+  'Car-Body.jpg', // background image filename
+  'Wheels and Rims.jpg',
+  'Engine.jpg',
+  'Vehicle Body Parts.jpg',
+  'Accessories.jpg',
+  'FooterCar.jpg', // footer background image filename
+  'Lamps2.jpg', // duplicate entry to test handling
 ];
 
 filenames.forEach((f, i) => {

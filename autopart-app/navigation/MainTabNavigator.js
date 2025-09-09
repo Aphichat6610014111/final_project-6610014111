@@ -19,8 +19,12 @@ const MainTabNavigator = () => (
         else if (route.name === 'Profile') iconName = 'person';
         return <Icon name={iconName} size={size} color={color} />;
       },
-      tabBarActiveTintColor: '#007AFF',
-      tabBarInactiveTintColor: 'gray',
+      tabBarActiveTintColor: '#ff6b6b',
+      tabBarInactiveTintColor: 'rgba(255,255,255,0.7)',
+      tabBarStyle: {
+        backgroundColor: '#2b0000',
+        borderTopColor: 'rgba(255,255,255,0.06)'
+      },
   headerShown: false,
     })}
   >
