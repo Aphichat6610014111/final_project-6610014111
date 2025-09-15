@@ -20,6 +20,10 @@ const AdminDashboard = ({ navigation }) => {
           <Text style={styles.cardTitle}>Manage Reviews</Text>
           <Text style={styles.cardDesc}>Moderate customer feedback</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('AdminOrders')}>
+          <Text style={styles.cardTitle}>Pending Orders</Text>
+          <Text style={styles.cardDesc}>View and approve pending orders</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.section}>

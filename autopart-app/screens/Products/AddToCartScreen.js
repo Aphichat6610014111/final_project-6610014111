@@ -4,11 +4,22 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import assetsIndex from '../../assets/assetsIndex';
 import AuthContext from '../../context/AuthContext';
 
+// Local front-end currency formatter to display USD
+const formatUSD = (value) => {
+  try {
+    const num = Number(value) || 0;
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
+  } catch (e) {
+    return `$${value}`;
+  }
+};
+
 const AddToCartScreen = ({ navigation, route }) => {
-  const { product } = route.params || {};
+  const { product, quantity: incomingQuantity } = route.params || {};
   const { user, token } = useContext(AuthContext);
 
-  const [quantity, setQuantity] = useState(1);
+  const initialQty = Number(incomingQuantity) && Number(incomingQuantity) > 0 ? Number(incomingQuantity) : 1;
+  const [quantity, setQuantity] = useState(initialQty);
 
   if (!product) {
     return (
@@ -74,9 +85,9 @@ const AddToCartScreen = ({ navigation, route }) => {
           <Text style={styles.category}>{product.category}</Text>
 
           <View style={styles.priceRow}>
-            <Text style={styles.price}>฿{price?.toLocaleString?.() ?? price}</Text>
+            <Text style={styles.price}>{formatUSD(price)}</Text>
             {product.salePrice && (
-              <Text style={styles.original}>฿{(product.price || product.originalPrice)?.toLocaleString?.()}</Text>
+              <Text style={styles.original}>{formatUSD(product.price || product.originalPrice)}</Text>
             )}
           </View>
 
@@ -107,7 +118,7 @@ const AddToCartScreen = ({ navigation, route }) => {
 
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>รวมทั้งสิ้น</Text>
-            <Text style={styles.totalValue}>฿{total?.toLocaleString?.()}</Text>
+            <Text style={styles.totalValue}>{formatUSD(total)}</Text>
           </View>
 
           <TouchableOpacity style={styles.checkoutBtn} onPress={onCheckout}>

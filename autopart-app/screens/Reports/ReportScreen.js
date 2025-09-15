@@ -2,6 +2,6 @@
 import React from 'react';
 import { View } from 'react-native';
 
-export default function ReportScreen() {
-  return <View />;
-}
+// Reports removed — component intentionally removed. Update imports/routes if referenced.
+
+export default null;

@@ -13,9 +13,32 @@ app.use(cors());
 app.use(express.json());
 
 const path = require('path');
+const fs = require('fs');
+const http = require('http');
+const https = require('https');
+const multer = require('multer');
 
 // Serve static images from ./images if present
 app.use('/images', express.static(path.join(__dirname, 'images')));
+
+// Ensure images/users directory exists
+const usersImagesDir = path.join(__dirname, 'images', 'users');
+if (!fs.existsSync(usersImagesDir)) {
+  fs.mkdirSync(usersImagesDir, { recursive: true });
+}
+
+// Multer setup for avatar uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, usersImagesDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname) || '.jpg';
+    const fname = `${Date.now()}-${Math.random().toString(36).substring(2,8)}${ext}`;
+    cb(null, fname);
+  }
+});
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/autopart_db', {
@@ -46,10 +69,49 @@ const userSchema = new mongoose.Schema({
     required: true,
     minlength: 6
   },
+  // Avatar stores structured metadata about uploaded profile images
+  avatar: {
+    url: { type: String, trim: true, default: null },
+    filename: { type: String, trim: true, default: null },
+    mimeType: { type: String, trim: true, default: null },
+    size: { type: Number, default: 0 },
+    uploadedAt: { type: Date, default: null }
+  },
   role: {
     type: String,
     enum: ['admin', 'employee'],
     default: 'employee'
+  }
+  ,
+  // Shipping addresses (embedded metadata only)
+  shipping: {
+    type: [new mongoose.Schema({
+      label: { type: String, trim: true },           // e.g., 'Home', 'Office'
+      firstName: { type: String, trim: true },
+      lastName: { type: String, trim: true },
+      phone: { type: String, trim: true },
+      street: { type: String, trim: true },
+      subdistrict: { type: String, trim: true },
+      district: { type: String, trim: true },
+      province: { type: String, trim: true },
+      zip: { type: String, trim: true },
+      apt: { type: String, trim: true },
+      isDefault: { type: Boolean, default: false }
+    }, { _id: true })],
+    default: []
+  },
+  // Payment methods - store metadata and token from payment provider only
+  paymentMethods: {
+    type: [new mongoose.Schema({
+      provider: { type: String, trim: true },     // e.g., 'stripe'
+      token: { type: String, trim: true },        // provider token/id (NOT PAN/CVV)
+      brand: { type: String, trim: true },        // Visa, MasterCard
+      last4: { type: String, trim: true },
+      expMonth: { type: Number },
+      expYear: { type: Number },
+      isDefault: { type: Boolean, default: false }
+    }, { _id: true })],
+    default: []
   }
 }, { timestamps: true });
 
@@ -67,6 +129,10 @@ userSchema.methods.comparePassword = async function(password) {
 
 userSchema.methods.toJSON = function() {
   const user = this.toObject();
+  // Convert structured avatar object to a simple URL string for API consumers
+  if (user.avatar && typeof user.avatar === 'object') {
+    user.avatar = user.avatar.url || null;
+  }
   delete user.password;
   return user;
 };
@@ -155,6 +221,22 @@ const transactionSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
+
+// Order Schema (for pending orders that admin can approve)
+const orderItemSchema = new mongoose.Schema({
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+  quantity: { type: Number, required: true, min: 1 }
+}, { _id: false });
+
+const orderSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  items: { type: [orderItemSchema], required: true },
+  shipping: { type: Object },
+  paymentMethod: { type: String },
+  status: { type: String, enum: ['pending','approved','cancelled'], default: 'pending' }
+}, { timestamps: true });
+
+const Order = mongoose.model('Order', orderSchema);
 
 // ================================
 // MIDDLEWARE
@@ -380,6 +462,202 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
   });
 });
 
+// ================================
+// ADDRESSES & PAYMENT METHODS
+// ================================
+
+// List user's shipping addresses
+app.get('/api/users/addresses', authenticateToken, async (req, res) => {
+  try {
+    res.json({ success: true, data: { addresses: req.user.shipping || [] } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to fetch addresses', error: err.message });
+  }
+});
+
+// Backward-compatible alias: use '/api/users/shipping' path as preferred name
+app.get('/api/users/shipping', authenticateToken, async (req, res) => {
+  try {
+    res.json({ success: true, data: { addresses: req.user.shipping || [] } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to fetch shipping', error: err.message });
+  }
+});
+
+// Add a shipping address
+app.post('/api/users/addresses', authenticateToken, async (req, res) => {
+  try {
+    const addr = req.body;
+    // basic validation
+    if (!addr || !addr.street) return res.status(400).json({ success: false, message: 'Address street required' });
+
+    // if this is the first address, set as default
+    if (!Array.isArray(req.user.shipping) || req.user.shipping.length === 0) {
+      addr.isDefault = true;
+    }
+
+    req.user.shipping = req.user.shipping || [];
+    req.user.shipping.push(addr);
+    await req.user.save();
+
+    res.status(201).json({ success: true, message: 'Address added', data: { address: addr } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to add address', error: err.message });
+  }
+});
+
+// Preferred shipping path (alias)
+app.post('/api/users/shipping', authenticateToken, async (req, res) => {
+  try {
+    const addr = req.body;
+    if (!addr || !addr.street) return res.status(400).json({ success: false, message: 'Address street required' });
+
+    if (!Array.isArray(req.user.shipping) || req.user.shipping.length === 0) {
+      addr.isDefault = true;
+    }
+
+    req.user.shipping = req.user.shipping || [];
+    req.user.shipping.push(addr);
+    await req.user.save();
+
+    res.status(201).json({ success: true, message: 'Shipping address added', data: { address: addr } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to add shipping', error: err.message });
+  }
+});
+
+// Update an address by its _id
+app.put('/api/users/addresses/:addrId', authenticateToken, async (req, res) => {
+  try {
+    const { addrId } = req.params;
+    const idx = (req.user.shipping || []).findIndex(a => a._id && a._id.toString() === addrId);
+    if (idx === -1) return res.status(404).json({ success: false, message: 'Address not found' });
+
+    Object.assign(req.user.shipping[idx], req.body);
+    await req.user.save();
+    res.json({ success: true, message: 'Address updated', data: { address: req.user.shipping[idx] } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to update address', error: err.message });
+  }
+});
+
+// Alias for update via /shipping
+app.put('/api/users/shipping/:addrId', authenticateToken, async (req, res) => {
+  try {
+    const { addrId } = req.params;
+    const idx = (req.user.shipping || []).findIndex(a => a._id && a._id.toString() === addrId);
+    if (idx === -1) return res.status(404).json({ success: false, message: 'Shipping address not found' });
+
+    Object.assign(req.user.shipping[idx], req.body);
+    await req.user.save();
+    res.json({ success: true, message: 'Shipping address updated', data: { address: req.user.shipping[idx] } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to update shipping', error: err.message });
+  }
+});
+
+// Delete an address
+app.delete('/api/users/addresses/:addrId', authenticateToken, async (req, res) => {
+  try {
+    const { addrId } = req.params;
+    const before = req.user.shipping || [];
+    req.user.shipping = before.filter(a => !(a._id && a._id.toString() === addrId));
+    await req.user.save();
+    res.json({ success: true, message: 'Address removed' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to remove address', error: err.message });
+  }
+});
+
+// Alias for delete via /shipping
+app.delete('/api/users/shipping/:addrId', authenticateToken, async (req, res) => {
+  try {
+    const { addrId } = req.params;
+    const before = req.user.shipping || [];
+    req.user.shipping = before.filter(a => !(a._id && a._id.toString() === addrId));
+    await req.user.save();
+    res.json({ success: true, message: 'Shipping address removed' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to remove shipping', error: err.message });
+  }
+});
+
+// List payment methods (metadata only)
+app.get('/api/users/payment-methods', authenticateToken, async (req, res) => {
+  try {
+    res.json({ success: true, data: { paymentMethods: req.user.paymentMethods || [] } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to fetch payment methods', error: err.message });
+  }
+});
+
+// Add a payment method (expect tokenized data from frontend/payment provider)
+app.post('/api/users/payment-methods', authenticateToken, [
+  body('provider').notEmpty(),
+  body('token').notEmpty(),
+  body('last4').optional().isLength({ min: 2 })
+], handleValidationErrors, async (req, res) => {
+  try {
+    const pm = {
+      provider: req.body.provider,
+      token: req.body.token,
+      brand: req.body.brand || null,
+      last4: req.body.last4 || null,
+      expMonth: req.body.expMonth || null,
+      expYear: req.body.expYear || null
+    };
+
+  // Enforce single payment method per account: replace any existing methods with this one
+  pm.isDefault = true;
+  req.user.paymentMethods = [pm];
+    await req.user.save();
+
+    res.status(201).json({ success: true, message: 'Payment method added', data: { paymentMethod: pm } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to add payment method', error: err.message });
+  }
+});
+
+// Delete a payment method by its _id
+app.delete('/api/users/payment-methods/:pmId', authenticateToken, async (req, res) => {
+  try {
+    const { pmId } = req.params;
+    const before = req.user.paymentMethods || [];
+    req.user.paymentMethods = before.filter(p => !(p._id && p._id.toString() === pmId));
+    await req.user.save();
+    res.json({ success: true, message: 'Payment method removed' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to remove payment method', error: err.message });
+  }
+});
+
+// Update a payment method by its _id
+app.put('/api/users/payment-methods/:pmId', authenticateToken, async (req, res) => {
+  try {
+    const { pmId } = req.params;
+    const idx = (req.user.paymentMethods || []).findIndex(p => p._id && p._id.toString() === pmId);
+    if (idx === -1) return res.status(404).json({ success: false, message: 'Payment method not found' });
+
+    // allowed fields: brand, last4, expMonth, expYear, provider, isDefault
+    const allowed = ['brand','last4','expMonth','expYear','provider','isDefault'];
+    // modify the found subdocument
+    for (const key of Object.keys(req.body)) {
+      if (allowed.includes(key)) {
+        req.user.paymentMethods[idx][key] = req.body[key];
+      }
+    }
+
+    // Replace the paymentMethods array with only the updated object to enforce single-method policy
+    const updated = req.user.paymentMethods[idx];
+    req.user.paymentMethods = [updated];
+
+    await req.user.save();
+    res.json({ success: true, message: 'Payment method updated', data: { paymentMethod: updated } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to update payment method', error: err.message });
+  }
+});
+
 // Update user profile
 app.put('/api/users/profile',
   authenticateToken,
@@ -389,11 +667,17 @@ app.put('/api/users/profile',
   handleValidationErrors,
   async (req, res) => {
     try {
-      const { name } = req.body;
+        const { name, avatar } = req.body;
       
-      if (name) {
-        req.user.name = name;
-      }
+        if (name) {
+          req.user.name = name;
+        }
+        if (typeof avatar === 'string') {
+          // store avatar URI or path (client can send absolute URL or server-relative path)
+          req.user.avatar = req.user.avatar || {};
+          req.user.avatar.url = avatar;
+          req.user.avatar.uploadedAt = new Date();
+        }
 
       await req.user.save();
 
@@ -411,6 +695,333 @@ app.put('/api/users/profile',
     }
   }
 );
+
+// Avatar upload endpoint (multipart) - saves file under ./images/users and updates user.avatar to /images/users/<file>
+app.post('/api/users/profile/avatar', authenticateToken, upload.single('avatar'), async (req, res) => {
+  try {
+  // Debug: log incoming content-type and whether multer parsed a file
+  try { console.log('[debug] Avatar upload content-type:', req.headers['content-type']); } catch (e) { }
+  try { console.log('[debug] Avatar upload req.file present:', !!req.file, req.file ? { filename: req.file.filename, mimetype: req.file.mimetype, size: req.file.size } : null); } catch (e) { }
+  if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
+  const relPath = `/images/users/${req.file.filename}`;
+  req.user.avatar = req.user.avatar || {};
+  req.user.avatar.url = relPath;
+  req.user.avatar.filename = req.file.filename;
+  req.user.avatar.mimeType = req.file.mimetype;
+  req.user.avatar.size = req.file.size;
+  req.user.avatar.uploadedAt = new Date();
+  await req.user.save();
+  res.json({ success: true, message: 'Avatar uploaded', data: { user: req.user } });
+  } catch (error) {
+    console.error('Avatar upload error', error);
+    res.status(500).json({ success: false, message: 'Failed to upload avatar', error: error.message });
+  }
+});
+
+// Download image from URL, save to ./images/users and update user.avatar
+app.post('/api/users/profile/avatar-from-url', authenticateToken, async (req, res) => {
+  try {
+    const { url } = req.body || {};
+    if (!url || typeof url !== 'string') return res.status(400).json({ success: false, message: 'URL required' });
+
+    // helper to follow redirects and perform HEAD
+    const headRequest = (u, maxRedirects = 5) => new Promise((resolve, reject) => {
+      try {
+        const parsed = new URL(u);
+        const lib = parsed.protocol === 'https:' ? https : http;
+        const reqHead = lib.request(parsed, { method: 'HEAD', headers: { 'User-Agent': 'autopart-backend/1.0' } }, (resp) => {
+          const { statusCode, headers } = resp;
+          if (statusCode >= 300 && statusCode < 400 && headers.location && maxRedirects > 0) {
+            const next = new URL(headers.location, parsed).toString();
+            resolve(headRequest(next, maxRedirects - 1));
+            return;
+          }
+          resolve({ statusCode, headers });
+        });
+        reqHead.on('error', reject);
+        reqHead.end();
+      } catch (err) { reject(err); }
+    });
+
+    const parsedUrl = new URL(url);
+    // probe headers
+    const head = await headRequest(url);
+    const contentType = (head.headers['content-type'] || '').toLowerCase();
+    const contentLength = head.headers['content-length'] ? parseInt(head.headers['content-length'], 10) : 0;
+
+    if (!contentType.startsWith('image/')) {
+      return res.status(400).json({ success: false, message: 'URL is not an image' });
+    }
+    // size limit 5MB
+    const MAX = 5 * 1024 * 1024;
+    if (contentLength && contentLength > MAX) {
+      return res.status(400).json({ success: false, message: 'Image is too large' });
+    }
+
+    // determine extension
+    let ext = path.extname(parsedUrl.pathname) || '';
+    if (!ext) {
+      // fallback from content-type
+      if (contentType.includes('jpeg')) ext = '.jpg';
+      else if (contentType.includes('png')) ext = '.png';
+      else if (contentType.includes('gif')) ext = '.gif';
+      else if (contentType.includes('webp')) ext = '.webp';
+      else ext = '.jpg';
+    }
+
+    const filename = `${Date.now()}-${Math.random().toString(36).substring(2,8)}${ext}`;
+    const destPath = path.join(usersImagesDir, filename);
+
+    // download with redirect support
+    const downloadWithRedirect = (u, dest, maxRedirects = 5) => new Promise((resolve, reject) => {
+      try {
+        const p = new URL(u);
+        const lib = p.protocol === 'https:' ? https : http;
+        const reqGet = lib.get(p, (resp) => {
+          if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location && maxRedirects > 0) {
+            const next = new URL(resp.headers.location, p).toString();
+            resolve(downloadWithRedirect(next, dest, maxRedirects - 1));
+            return;
+          }
+          if (resp.statusCode < 200 || resp.statusCode >= 300) {
+            return reject(new Error('Failed to download image, status ' + resp.statusCode));
+          }
+          const file = fs.createWriteStream(dest);
+          resp.pipe(file);
+          file.on('finish', () => file.close(() => resolve({ size: fs.statSync(dest).size, mimeType: resp.headers['content-type'] }))); 
+          file.on('error', (err) => reject(err));
+        });
+        reqGet.on('error', reject);
+      } catch (err) { reject(err); }
+    });
+
+    // if user already has a stored filename, try to remove it to avoid orphan files
+    try {
+      const existing = req.user.avatar || {};
+      let oldFilename = existing.filename;
+      if (!oldFilename && existing.url) {
+        const parts = existing.url.split('/');
+        oldFilename = parts[parts.length - 1];
+      }
+      if (oldFilename) {
+        const oldPath = path.join(usersImagesDir, oldFilename);
+        try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath); } catch (e) { /* ignore */ }
+      }
+    } catch (e) { /* ignore deletion errors */ }
+
+    const result = await downloadWithRedirect(url, destPath);
+    const savedSize = result.size || (fs.existsSync(destPath) ? fs.statSync(destPath).size : 0);
+    const savedMime = result.mimeType || contentType || null;
+
+    // update user avatar metadata
+    const relPath = `/images/users/${filename}`;
+    req.user.avatar = req.user.avatar || {};
+    req.user.avatar.url = relPath;
+    req.user.avatar.filename = filename;
+    req.user.avatar.mimeType = savedMime;
+    req.user.avatar.size = savedSize;
+    req.user.avatar.uploadedAt = new Date();
+    await req.user.save();
+
+    res.json({ success: true, message: 'Avatar downloaded and saved', data: { user: req.user } });
+  } catch (error) {
+    console.error('avatar-from-url error', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch and save avatar', error: error.message });
+  }
+});
+
+// Update (replace) avatar from URL - same behavior as POST but provided as PUT for explicit updates
+app.put('/api/users/profile/avatar-from-url', authenticateToken, async (req, res) => {
+  try {
+    const { url } = req.body || {};
+    if (!url || typeof url !== 'string') return res.status(400).json({ success: false, message: 'URL required' });
+
+    // helper to follow redirects and perform HEAD
+    const headRequest = (u, maxRedirects = 5) => new Promise((resolve, reject) => {
+      try {
+        const parsed = new URL(u);
+        const lib = parsed.protocol === 'https:' ? https : http;
+        const reqHead = lib.request(parsed, { method: 'HEAD', headers: { 'User-Agent': 'autopart-backend/1.0' } }, (resp) => {
+          const { statusCode, headers } = resp;
+          if (statusCode >= 300 && statusCode < 400 && headers.location && maxRedirects > 0) {
+            const next = new URL(headers.location, parsed).toString();
+            resolve(headRequest(next, maxRedirects - 1));
+            return;
+          }
+          resolve({ statusCode, headers });
+        });
+        reqHead.on('error', reject);
+        reqHead.end();
+      } catch (err) { reject(err); }
+    });
+
+    const parsedUrl = new URL(url);
+    // probe headers
+    const head = await headRequest(url);
+    const contentType = (head.headers['content-type'] || '').toLowerCase();
+    const contentLength = head.headers['content-length'] ? parseInt(head.headers['content-length'], 10) : 0;
+
+    if (!contentType.startsWith('image/')) {
+      return res.status(400).json({ success: false, message: 'URL is not an image' });
+    }
+    // size limit 5MB
+    const MAX = 5 * 1024 * 1024;
+    if (contentLength && contentLength > MAX) {
+      return res.status(400).json({ success: false, message: 'Image is too large' });
+    }
+
+    // determine extension
+    let ext = path.extname(parsedUrl.pathname) || '';
+    if (!ext) {
+      // fallback from content-type
+      if (contentType.includes('jpeg')) ext = '.jpg';
+      else if (contentType.includes('png')) ext = '.png';
+      else if (contentType.includes('gif')) ext = '.gif';
+      else if (contentType.includes('webp')) ext = '.webp';
+      else ext = '.jpg';
+    }
+
+    const filename = `${Date.now()}-${Math.random().toString(36).substring(2,8)}${ext}`;
+    const destPath = path.join(usersImagesDir, filename);
+
+    // remove previous stored file if present
+    try {
+      const existing = req.user.avatar || {};
+      let oldFilename = existing.filename;
+      if (!oldFilename && existing.url) {
+        const parts = existing.url.split('/');
+        oldFilename = parts[parts.length - 1];
+      }
+      if (oldFilename) {
+        const oldPath = path.join(usersImagesDir, oldFilename);
+        try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath); } catch (e) { /* ignore */ }
+      }
+    } catch (e) { /* ignore */ }
+
+    // download with redirect support
+    const downloadWithRedirect = (u, dest, maxRedirects = 5) => new Promise((resolve, reject) => {
+      try {
+        const p = new URL(u);
+        const lib = p.protocol === 'https:' ? https : http;
+        const reqGet = lib.get(p, (resp) => {
+          if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location && maxRedirects > 0) {
+            const next = new URL(resp.headers.location, p).toString();
+            resolve(downloadWithRedirect(next, dest, maxRedirects - 1));
+            return;
+          }
+          if (resp.statusCode < 200 || resp.statusCode >= 300) {
+            return reject(new Error('Failed to download image, status ' + resp.statusCode));
+          }
+          const file = fs.createWriteStream(dest);
+          resp.pipe(file);
+          file.on('finish', () => file.close(() => resolve({ size: fs.statSync(dest).size, mimeType: resp.headers['content-type'] })));
+          file.on('error', (err) => reject(err));
+        });
+        reqGet.on('error', reject);
+      } catch (err) { reject(err); }
+    });
+
+    const result = await downloadWithRedirect(url, destPath);
+    const savedSize = result.size || (fs.existsSync(destPath) ? fs.statSync(destPath).size : 0);
+    const savedMime = result.mimeType || contentType || null;
+
+    // update user avatar metadata
+    const relPath = `/images/users/${filename}`;
+    req.user.avatar = req.user.avatar || {};
+    req.user.avatar.url = relPath;
+    req.user.avatar.filename = filename;
+    req.user.avatar.mimeType = savedMime;
+    req.user.avatar.size = savedSize;
+    req.user.avatar.uploadedAt = new Date();
+    await req.user.save();
+
+    res.json({ success: true, message: 'Avatar downloaded and saved (updated)', data: { user: req.user } });
+  } catch (error) {
+    console.error('avatar-from-url PUT error', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch and save avatar', error: error.message });
+  }
+});
+
+// Delete user avatar (remove file and clear metadata)
+app.delete('/api/users/profile/avatar', authenticateToken, async (req, res) => {
+  try {
+    const av = req.user.avatar || {};
+    let filename = av.filename;
+    // if filename missing, try deriving from URL
+    if (!filename && av.url) {
+      const parts = av.url.split('/');
+      filename = parts[parts.length - 1];
+    }
+    if (filename) {
+      const filePath = path.join(usersImagesDir, filename);
+      try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (e) { /* ignore delete errors */ }
+    }
+
+    // clear avatar metadata
+    req.user.avatar = { url: null, filename: null, mimeType: null, size: 0, uploadedAt: null };
+    await req.user.save();
+    res.json({ success: true, message: 'Avatar removed', data: { user: req.user } });
+  } catch (error) {
+    console.error('Delete avatar error', error);
+    res.status(500).json({ success: false, message: 'Failed to remove avatar', error: error.message });
+  }
+});
+
+// Change password for current user
+app.put('/api/users/change-password',
+  authenticateToken,
+  [
+    body('currentPassword').notEmpty(),
+    body('newPassword').isLength({ min: 6 })
+  ],
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const user = req.user;
+
+      // Verify current password
+      const match = await user.comparePassword(currentPassword);
+      if (!match) {
+        return res.status(400).json({ success: false, message: 'Current password is incorrect' });
+      }
+
+      // Update password (pre-save hook will hash)
+      user.password = newPassword;
+      await user.save();
+
+      res.json({ success: true, message: 'Password changed successfully' });
+    } catch (error) {
+      console.error('Change password error', error);
+      res.status(500).json({ success: false, message: 'Failed to change password', error: error.message });
+    }
+  }
+);
+
+// Get orders for current authenticated user
+app.get('/api/orders/mine', authenticateToken, async (req, res) => {
+  try {
+    const orders = await Order.find({ userId: req.user._id }).sort({ createdAt: -1 }).limit(50).lean();
+    // populate product info for items
+    const productIds = orders.flatMap(o => (o.items || []).map(i => i.productId));
+    const products = await Product.find({ _id: { $in: productIds } }).lean();
+    const productMap = {};
+    products.forEach(p => { productMap[p._id.toString()] = p; });
+
+    const enriched = orders.map(o => ({
+      ...o,
+      items: (o.items || []).map(it => ({
+        ...it,
+        product: productMap[it.productId.toString()] || null
+      }))
+    }));
+
+    res.json({ success: true, data: { orders: enriched } });
+  } catch (error) {
+    console.error('Get user orders error', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch orders', error: error.message });
+  }
+});
 
 // Update user (Admin only)
 app.put('/api/users/:id',
@@ -1034,6 +1645,110 @@ app.get('/api/transactions/:id', authenticateToken, async (req, res) => {
       message: 'Failed to fetch transaction',
       error: error.message
     });
+  }
+});
+
+// ================================
+// ORDER ROUTES
+// ================================
+
+// Create an order (customer checkout creates a pending order)
+app.post('/api/orders', authenticateToken, async (req, res) => {
+  try {
+    const { items, shipping, paymentMethod } = req.body;
+    if (!items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ success: false, message: 'Order items required' });
+
+    // validate items
+    const sanitized = items.map(it => ({ productId: it.productId, quantity: Number(it.quantity || 1) }));
+
+    const order = new Order({ userId: req.user._id, items: sanitized, shipping, paymentMethod, status: 'pending' });
+    await order.save();
+
+    res.status(201).json({ success: true, message: 'Order created', data: { order } });
+  } catch (error) {
+    console.error('create order error', error);
+    res.status(500).json({ success: false, message: 'Failed to create order', error: error.message });
+  }
+});
+
+// Admin: list orders
+app.get('/api/orders', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const orders = await Order.find().populate('userId', 'name email').sort({ createdAt: -1 }).limit(200);
+    res.json({ success: true, data: { orders } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch orders', error: error.message });
+  }
+});
+
+// Get single order by ID (owner or admin)
+app.get('/api/orders/:id', authenticateToken, async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ success: false, message: 'Invalid order id' });
+
+    // fetch raw order
+    const order = await Order.findById(id).lean();
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
+    // allow admins or the owner
+    if (req.user.role !== 'admin' && (!order.userId || order.userId.toString() !== req.user._id.toString())) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    // enrich items with product details
+    const productIds = (order.items || []).map(i => i.productId).filter(Boolean);
+    const products = productIds.length ? await Product.find({ _id: { $in: productIds } }).lean() : [];
+    const productMap = {};
+    products.forEach(p => { productMap[p._id.toString()] = p; });
+
+    const enriched = {
+      ...order,
+      items: (order.items || []).map(it => ({
+        ...it,
+        product: productMap[(it.productId || '').toString()] || null
+      }))
+    };
+
+    res.json({ success: true, data: { order: enriched } });
+  } catch (error) {
+    console.error('Get order by id error', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch order', error: error.message });
+  }
+});
+
+// Admin: approve an order -> create transactions and decrement stock atomically per item
+app.post('/api/orders/:id/approve', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (order.status !== 'pending') return res.status(400).json({ success: false, message: 'Order not in pending state' });
+
+    // check stock availability for all items
+    for (const it of order.items) {
+      const p = await Product.findById(it.productId);
+      if (!p) return res.status(404).json({ success: false, message: `Product ${it.productId} not found` });
+      if (p.stock < it.quantity) return res.status(400).json({ success: false, message: `Insufficient stock for product ${p._id}` });
+    }
+
+    // create transactions and update stock
+    const created = [];
+    for (const it of order.items) {
+      const transaction = new Transaction({ userId: order.userId, productId: it.productId, quantity: it.quantity, type: 'out' });
+      await transaction.save();
+      const p = await Product.findById(it.productId);
+      p.stock -= it.quantity;
+      await p.save();
+      created.push(transaction);
+    }
+
+    order.status = 'approved';
+    await order.save();
+
+    res.json({ success: true, message: 'Order approved and transactions created', data: { transactions: created, order } });
+  } catch (error) {
+    console.error('approve order error', error);
+    res.status(500).json({ success: false, message: 'Failed to approve order', error: error.message });
   }
 });
 

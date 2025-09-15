@@ -1,0 +1,36 @@
+/* Global web styles to remove default white margins and ensure dark background */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #000; /* use true black background per request */
+  color: #fff;
+  /* use system fonts */
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Page container for product pages to center content and limit width on large screens */
+.product-page-container {
+  display: block;
+  margin: 0 auto;
+  max-width: 1200px;
+  width: 95%;
+}
+
+/* Make native inputs transparent and remove default outlines on web */
+input, textarea {
+  background: transparent !important;
+  color: inherit !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove scrollbar gap on some browsers */
+body {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* No custom @font-face - use system fonts to remove bundled font usage */
+
+/* NOTE: For native apps (iOS/Android) you must bundle the Noto Sans Thai font and register it with the project (e.g., via react-native.config.js or expo's asset linking). */

@@ -2,6 +2,6 @@
 import React from 'react';
 import { View } from 'react-native';
 
-export default function News() {
-  return <View />;
-}
+// News component intentionally removed. Update imports/routes if you still reference it.
+
+export default null;

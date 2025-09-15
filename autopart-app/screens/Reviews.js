@@ -2,6 +2,7 @@ import React, { useEffect, useState, useContext } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions, ActivityIndicator, TextInput, Alert } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import axios from 'axios';
+import { apiUrl } from '../utils/apiConfig';
 import AuthContext from '../context/AuthContext';
 
 export default function Reviews({ route, navigation }) {
@@ -13,6 +14,11 @@ export default function Reviews({ route, navigation }) {
   const [reviewName, setReviewName] = useState(user?.name || user?.username || '');
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
+  // Filter & sort state
+  const [ratingFilter, setRatingFilter] = useState('all'); // 'all' or 5,4,3,2,1
+  const [sortBy, setSortBy] = useState('most_relevant');
+  const [showRatingMenu, setShowRatingMenu] = useState(false);
+  const [showSortMenu, setShowSortMenu] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -21,7 +27,7 @@ export default function Reviews({ route, navigation }) {
       if (!(product._id || product.id)) return;
       setLoading(true);
       try {
-        const res = await axios.get(`http://localhost:5000/api/products/${product._id || product.id}/reviews`);
+  const res = await axios.get(apiUrl(`/api/products/${product._id || product.id}/reviews`));
         if (!cancelled) setReviews(res?.data?.reviews || res?.data || []);
       } catch (e) {
         console.warn('Failed to fetch reviews', e?.message || e);
@@ -32,16 +38,23 @@ export default function Reviews({ route, navigation }) {
   }, [product._id, product.id]);
 
   const submitReview = async () => {
+    if (!user || !token) {
+      Alert.alert('ต้องเข้าสู่ระบบ', 'กรุณาเข้าสู่ระบบก่อนส่งรีวิว', [
+        { text: 'เข้าสู่ระบบ', onPress: () => navigation.navigate('Login') },
+        { text: 'ยกเลิก' }
+      ]);
+      return;
+    }
     if (!reviewComment.trim()) { Alert.alert('ข้อผิดพลาด', 'กรุณากรอกข้อความรีวิว'); return; }
     try {
       setLoading(true);
       let serverReview = null;
       if (product._id || product.id) {
-        const res = await axios.post(`http://localhost:5000/api/products/${product._id || product.id}/reviews`, {
+  const res = await axios.post(apiUrl(`/api/products/${product._id || product.id}/reviews`), {
           name: reviewName.trim() || (user && (user.name || user.username)) || 'ผู้ใช้งาน',
           rating: reviewRating,
           comment: reviewComment.trim()
-        });
+        }, { headers: { Authorization: `Bearer ${token}` } });
         serverReview = res?.data?.review;
       }
       const newR = serverReview || { _id: String(Date.now()), author: reviewName.trim() || (user && (user.name || user.username)) || 'ผู้ใช้งาน', rating: reviewRating, comment: reviewComment.trim(), createdAt: new Date().toISOString() };
@@ -59,7 +72,7 @@ export default function Reviews({ route, navigation }) {
   const submitReply = async (reviewId, replyText, replyName) => {
     if (!replyText || !replyText.trim()) { Alert.alert('ข้อผิดพลาด', 'กรุณากรอกข้อความตอบกลับ'); return; }
     try {
-      const res = await axios.post(`http://localhost:5000/api/products/${product._id || product.id}/reviews/${reviewId}/replies`, {
+  const res = await axios.post(apiUrl(`/api/products/${product._id || product.id}/reviews/${reviewId}/replies`), {
         name: replyName || (user && (user.name || user.username)) || 'ผู้ใช้งาน',
         comment: replyText.trim()
       });
@@ -82,7 +95,7 @@ export default function Reviews({ route, navigation }) {
         setReviews(prev => prev.map(r => r._id === reviewId ? { ...r, helpfulCount: (r.helpfulCount||0) + 1 } : r));
         return;
       }
-      const res = await axios.post(`http://localhost:5000/api/products/${product._id || product.id}/reviews/${reviewId}/helpful`);
+  const res = await axios.post(apiUrl(`/api/products/${product._id || product.id}/reviews/${reviewId}/helpful`));
       const helpfulCount = res.data.helpfulCount;
       setReviews(prev => prev.map(r => (r._id === reviewId ? { ...r, helpfulCount } : r)));
     } catch (e) {
@@ -98,7 +111,7 @@ export default function Reviews({ route, navigation }) {
     }
     try {
       setLoading(true);
-      await axios.delete(`http://localhost:5000/api/products/${product._id || product.id}/reviews/${reviewId}`, { headers: { Authorization: `Bearer ${token}` } });
+  await axios.delete(apiUrl(`/api/products/${product._id || product.id}/reviews/${reviewId}`), { headers: { Authorization: `Bearer ${token}` } });
       setReviews(prev => prev.filter(r => r._id !== reviewId));
       Alert.alert('สำเร็จ', 'ลบรีวิวเรียบร้อย');
     } catch (e) {
@@ -117,6 +130,53 @@ export default function Reviews({ route, navigation }) {
   const numColumns = 2;
   const { width } = Dimensions.get('window');
   const cardWidth = Math.floor((width - 48) / numColumns);
+
+  // helper: map sort key to label
+  function sortLabel(key) {
+    switch (key) {
+      case 'newest': return 'Newest';
+      case 'oldest': return 'Oldest';
+      case 'most_helpful': return 'Most helpful';
+      case 'highest_rated': return 'Highest rated';
+      case 'lowest_rated': return 'Lowest rated';
+      default: return 'Most Relevant';
+    }
+  }
+
+  // Apply rating filter and sorting to reviews array
+  function filteredSortedReviews(list, ratingFilterVal, sortKey) {
+    let out = Array.isArray(list) ? [...list] : [];
+    // filter
+    if (ratingFilterVal && ratingFilterVal !== 'all') {
+      out = out.filter(r => Math.round(Number(r.rating) || 0) === Number(ratingFilterVal));
+    }
+    // sort
+    switch (sortKey) {
+      case 'newest':
+        out.sort((a,b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
+        break;
+      case 'oldest':
+        out.sort((a,b) => new Date(a.createdAt || a.date || 0) - new Date(b.createdAt || b.date || 0));
+        break;
+      case 'most_helpful':
+        out.sort((a,b) => (Number(b.helpfulCount) || 0) - (Number(a.helpfulCount) || 0));
+        break;
+      case 'highest_rated':
+        out.sort((a,b) => (Number(b.rating) || 0) - (Number(a.rating) || 0));
+        break;
+      case 'lowest_rated':
+        out.sort((a,b) => (Number(a.rating) || 0) - (Number(b.rating) || 0));
+        break;
+      default:
+        // most_relevant: keep server order but prefer higher helpful and rating
+        out.sort((a,b) => {
+          const ha = Number(a.helpfulCount)||0, hb = Number(b.helpfulCount)||0;
+          const ra = Number(a.rating)||0, rb = Number(b.rating)||0;
+          return (hb - ha) || (rb - ra) || 0;
+        });
+    }
+    return out;
+  }
 
   return (
     <View style={styles.page}>
@@ -137,7 +197,16 @@ export default function Reviews({ route, navigation }) {
             <Text style={styles.ratingNumber}>{(ratingAvg || 0).toFixed(1)}</Text>
           </View>
           <Text style={styles.subText}>Based on {reviews.length} reviews</Text>
-          <TouchableOpacity style={styles.leaveBtn} onPress={() => setShowForm(s => !s)}>
+          <TouchableOpacity style={styles.leaveBtn} onPress={() => {
+            if (!user || !token) {
+              Alert.alert('ต้องเข้าสู่ระบบ', 'กรุณาเข้าสู่ระบบก่อนเขียนรีวิว', [
+                { text: 'เข้าสู่ระบบ', onPress: () => navigation.navigate('Login') },
+                { text: 'ยกเลิก' }
+              ]);
+              return;
+            }
+            setShowForm(s => !s);
+          }}>
             <Text style={styles.leaveBtnText}>{showForm ? 'Cancel' : 'Leave a Review'}</Text>
           </TouchableOpacity>
 
@@ -182,13 +251,43 @@ export default function Reviews({ route, navigation }) {
       </View>
 
       <View style={styles.filterRow}>
-        <Text style={styles.filterText}>Filter by rating: All stars</Text>
-        <Text style={styles.filterText}>Sort by: Most Relevant</Text>
+        <TouchableOpacity style={styles.filterBtn} onPress={() => { setShowRatingMenu(s => !s); setShowSortMenu(false); }}>
+          <Text style={styles.filterText}>Filter by rating: {ratingFilter === 'all' ? 'All stars' : `${ratingFilter} star${ratingFilter>1?'s':''}`}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.filterBtn} onPress={() => { setShowSortMenu(s => !s); setShowRatingMenu(false); }}>
+          <Text style={styles.filterText}>Sort by: {sortLabel(sortBy)}</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* Rating dropdown menu */}
+      {showRatingMenu && (
+        <View style={styles.dropdownCard}>
+          <TouchableOpacity style={styles.dropdownItem} onPress={() => { setRatingFilter('all'); setShowRatingMenu(false); }}>
+            <Text style={styles.dropdownText}>All stars</Text>
+          </TouchableOpacity>
+          {[5,4,3,2,1].map(s => (
+            <TouchableOpacity key={s} style={styles.dropdownItem} onPress={() => { setRatingFilter(s); setShowRatingMenu(false); }}>
+              <Text style={styles.dropdownText}>{s} stars</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Sort dropdown menu */}
+      {showSortMenu && (
+        <View style={styles.dropdownCard}>
+          <TouchableOpacity style={styles.dropdownItem} onPress={() => { setSortBy('most_relevant'); setShowSortMenu(false); }}><Text style={styles.dropdownText}>Most Relevant</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.dropdownItem} onPress={() => { setSortBy('newest'); setShowSortMenu(false); }}><Text style={styles.dropdownText}>Newest</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.dropdownItem} onPress={() => { setSortBy('oldest'); setShowSortMenu(false); }}><Text style={styles.dropdownText}>Oldest</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.dropdownItem} onPress={() => { setSortBy('most_helpful'); setShowSortMenu(false); }}><Text style={styles.dropdownText}>Most helpful</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.dropdownItem} onPress={() => { setSortBy('highest_rated'); setShowSortMenu(false); }}><Text style={styles.dropdownText}>Highest rated</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.dropdownItem} onPress={() => { setSortBy('lowest_rated'); setShowSortMenu(false); }}><Text style={styles.dropdownText}>Lowest rated</Text></TouchableOpacity>
+        </View>
+      )}
 
       {loading ? <ActivityIndicator size="large" color="#FF3B30" style={{ marginTop: 20 }} /> : (
         <FlatList
-          data={reviews}
+          data={filteredSortedReviews(reviews, ratingFilter, sortBy)}
           keyExtractor={(r, i) => (r.id || r._id || String(i))}
           numColumns={numColumns}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 80 }}
@@ -290,4 +389,9 @@ const styles = StyleSheet.create({
   formInput: { backgroundColor: '#0d0d0d', color: '#fff', borderWidth: 1, borderColor: '#333', padding: 8, borderRadius: 6 },
   formTextarea: { backgroundColor: '#0d0d0d', color: '#fff', borderWidth: 1, borderColor: '#333', padding: 8, borderRadius: 6, height: 100, textAlignVertical: 'top' },
   formSubmit: { backgroundColor: '#FF3B30', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 }
+
+  ,dropdownCard: { position: 'absolute', right: 16, top: 120, backgroundColor: '#111', borderWidth: 1, borderColor: '#222', borderRadius: 6, paddingVertical: 6, width: 220, zIndex: 999 },
+  dropdownItem: { paddingVertical: 10, paddingHorizontal: 12 },
+  dropdownText: { color: '#ddd' },
+  filterBtn: { paddingHorizontal: 6 }
 });

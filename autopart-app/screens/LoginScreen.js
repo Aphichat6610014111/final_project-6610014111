@@ -14,9 +14,13 @@ import {
   Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { ImageBackground } from 'react-native';
+import assetsIndex from '../assets/assetsIndex';
 import AuthContext from '../context/AuthContext';
 import axios from 'axios';
+import { apiUrl } from '../utils/apiConfig';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import FA from 'react-native-vector-icons/FontAwesome5';
 import theme from '../theme';
 
 const { width, height } = Dimensions.get('window');
@@ -72,7 +76,7 @@ const LoginScreen = ({ navigation }) => {
         password
       };
 
-      const response = await axios.post('http://localhost:5000/api/auth/login', payload);
+  const response = await axios.post(apiUrl('/api/auth/login'), payload);
       const { token, user } = response.data.data;
       
       // Save auth state then navigate into the Main tabs and open the Home tab.
@@ -134,10 +138,8 @@ const LoginScreen = ({ navigation }) => {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <LinearGradient
-        colors={['#dc2626', '#7f1d1d', '#000000']}
-        style={styles.gradient}
-      >
+      <ImageBackground source={assetsIndex.map['register_login_background']} style={styles.gradient} resizeMode="cover">
+        <View style={styles.bgOverlay} />
         <ScrollView 
           contentContainerStyle={styles.scrollContainer}
           showsVerticalScrollIndicator={false}
@@ -160,11 +162,20 @@ const LoginScreen = ({ navigation }) => {
               <View style={styles.logoContainer}>
                 <Icon name="build" size={50} color="#fff" />
               </View>
-              <Text style={styles.appTitle}>Auto Parts</Text>
+              <Text style={styles.appTitle}>AUTOPARTS STORE</Text>
             </View>
 
-            {/* Login Form */}
+            {/* Centered dark panel similar to design */}
             <Animated.View style={styles.formContainer}>
+              {/* Social / alternative login row */}
+              <View style={styles.socialRow}>
+                <TouchableOpacity style={styles.socialBtn}><FA name="apple" size={18} color="#000" /></TouchableOpacity>
+                <TouchableOpacity style={styles.socialBtn}><FA name="facebook-f" size={18} color="#1877F2" /></TouchableOpacity>
+                <TouchableOpacity style={styles.socialBtn}><FA name="google" size={18} color="#DB4437" /></TouchableOpacity>
+                <TouchableOpacity style={styles.socialBtn}><FA name="twitch" size={18} color="#6441A4" /></TouchableOpacity>
+              </View>
+
+              <Text style={styles.orText}>or log in with</Text>
               {/* Email Input */}
               <View style={[
                 styles.inputContainer,
@@ -238,6 +249,17 @@ const LoginScreen = ({ navigation }) => {
                 <TouchableOpacity onPress={() => navigation.navigate('Register')}>
                   <Text style={styles.registerLink}>สมัครสมาชิก</Text>
                 </TouchableOpacity>
+                
+                {/* Back to Home button */}
+                <TouchableOpacity style={{ marginLeft: 12 }} onPress={() => {
+                  try {
+                    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+                  } catch (e) {
+                    navigation.navigate('Main');
+                  }
+                }}>
+                  <Text style={[styles.registerLink, { color: '#fff' }]}>กลับไปหน้าโฮม</Text>
+                </TouchableOpacity>
               </View>
 
               {/* Dev-only: autofill test admin credentials for quick testing */}
@@ -250,13 +272,12 @@ const LoginScreen = ({ navigation }) => {
                   }}
                   style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.06)'}}
                 >
-                  <Text style={{ color: '#fff', fontWeight: '600' }}>ใช้บัญชีทดสอบ</Text>
                 </TouchableOpacity>
               </View>
             </Animated.View>
           </Animated.View>
         </ScrollView>
-      </LinearGradient>
+      </ImageBackground>
     </KeyboardAvoidingView>
   );
 };
@@ -267,6 +288,8 @@ const styles = StyleSheet.create({
   },
   gradient: {
     flex: 1,
+    width: '100%',
+    height: '100%',
   },
   scrollContainer: {
     flexGrow: 1,
@@ -277,6 +300,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 30,
+  },
+  bgOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)'
   },
   logoSection: {
     alignItems: 'center',
@@ -298,13 +325,20 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   formContainer: {
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderRadius: 20,
-    padding: 40,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    borderRadius: 6,
+    padding: 24,
     marginHorizontal: 20,
     borderWidth: 1,
-    borderColor: 'rgba(220, 38, 38, 0.2)',
-  },
+    borderColor: 'rgba(255,255,255,0.04)',
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 520,
+    minWidth: 320,
+    },
+  socialRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  socialBtn: { width: 42, height: 36, borderRadius: 6, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginHorizontal: 6 },
+  orText: { textAlign: 'center', color: 'rgba(255,255,255,0.6)', marginVertical: 8 },
   welcomeTitle: {
     fontSize: 28,
     fontWeight: 'bold',
@@ -361,7 +395,7 @@ const styles = StyleSheet.create({
   loginButtonGradient: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
+    paddingVertical: 14,
     paddingHorizontal: 20,
   },
   loginButtonText: {

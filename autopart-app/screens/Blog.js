@@ -1,7 +1,4 @@
-// Blog removed for auto-parts project. Stub component kept to avoid import errors.
-import React from 'react';
-import { View } from 'react-native';
+// Blog component intentionally removed. Update imports/routes if you still reference it.
 
-export default function Blog() {
-  return <View />;
-}
+// Placeholder export to avoid module resolution errors during incremental edits.
+export default null;

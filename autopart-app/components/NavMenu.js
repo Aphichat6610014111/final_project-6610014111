@@ -29,8 +29,7 @@ const menuData = [
       },
     ],
   },
-  { title: 'Blog', route: 'Blog' },
-  { title: 'News', route: 'News' },
+  // Blog and News removed
   { title: 'Track', route: 'Track' },
   { title: 'Contact', route: 'Contact' },
 ];

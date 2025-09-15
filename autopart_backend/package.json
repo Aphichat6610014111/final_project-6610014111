@@ -7,7 +7,11 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "normalize-categories": "node scripts/normalize-categories.js",
     "seed": "node seed.js",
+    "randomize-sales": "node scripts/randomize-sales.js",
+    "sync-sales-status": "node scripts/sync-sales-status.js",
+    "apply-sale-prices": "node scripts/apply-sale-prices.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -34,6 +38,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^7.5.0",
     "morgan": "^1.10.1",
+    "multer": "^2.0.2",
     "supertest": "^7.1.4",
     "winston": "^3.17.0"
   },

@@ -25,6 +25,7 @@ const assetsList = [
   require('./Lamps.jpg'),
   require('./Power Steering Pump.jpg'),
   require('./Seat Cover.jpg'),
+  require('./Register_Login_background.jpg'),
   require('./splash-icon.png'),
   require('./Steel.jpg'),
   require('./Steering Rack.jpg'),
@@ -40,6 +41,17 @@ const assetsList = [
   require('./Accessories.jpg'),
   require('./FooterCar.jpg'), // footer background image
   require('./Lamps2.jpg'), // duplicate entry to test handling
+  require('./Master Card.avif'),
+  require('./Visa.avif'),
+  require('./American Express.avif'),
+  require('./Discover.avif'),
+  require('./Diners.avif'),
+  require('./China Union Pay.avif'),
+  require('./autopartse.avif'),
+  require('./Drivery.avif'),
+  require('./Drivilux.avif'),
+  require('./Motorks.avif'),
+  require('./Wheelbu.avif'),
 ];
 
 const makeKey = (filename) => filename.replace(/\.[^/.]+$/, '').toLowerCase();
@@ -70,6 +82,7 @@ const filenames = [
   'Lamps.jpg',
   'Power Steering Pump.jpg',
   'Seat Cover.jpg',
+  'Register_Login_background.jpg',
   'splash-icon.png',
   'Steel.jpg',
   'Steering Rack.jpg',
@@ -85,11 +98,43 @@ const filenames = [
   'Accessories.jpg',
   'FooterCar.jpg', // footer background image filename
   'Lamps2.jpg', // duplicate entry to test handling
+  'Master Card.avif',
+  'Visa.avif',
+  'American Express.avif',
+  'Discover.avif',
+  'Diners.avif',
+  'China Union Pay.avif',
+  'autopartse.avif',
+  'Drivery.avif',
+  'Drivilux.avif',
+  'Motorks.avif',
+  'Wheelbu.avif',
 ];
 
 filenames.forEach((f, i) => {
   const k = makeKey(f);
   if (!assetsMap[k]) assetsMap[k] = assetsList[i];
+});
+
+// Add compact keys for common payment asset lookups (no spaces, lowercased)
+const compactAliases = {
+  'mastercard': 'Master Card.avif',
+  'visa': 'Visa.avif',
+  'amex': 'American Express.avif',
+  'discover': 'Discover.avif',
+  'diners': 'Diners.avif',
+  'unionpay': 'China Union Pay.avif',
+  'autopartse': 'autopartse.avif',
+  'drivery': 'Drivery.avif',
+  'drivilux': 'Drivilux.avif',
+  'motorks': 'Motorks.avif',
+  'wheelbu': 'Wheelbu.avif',
+};
+
+Object.keys(compactAliases).forEach((alias) => {
+  const filename = compactAliases[alias];
+  const key = makeKey(filename);
+  if (assetsMap[key]) assetsMap[alias] = assetsMap[key];
 });
 
 export default {
