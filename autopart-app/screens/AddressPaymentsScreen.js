@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
   paypalBtn: { backgroundColor: '#0070ba', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 6, alignSelf: 'flex-start', marginBottom: 12 },
   paypalBtnText: { color: '#fff', fontWeight: '700' },
 
-  saveBtn: { backgroundColor: '#2f855a', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 6 },
+  saveBtn: { backgroundColor: '#ff6b6b', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 6 },
   saveText: { color: '#fff', fontWeight: '700' },
   cancelBtn: { backgroundColor: '#1f2937', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 6 },
   cancelText: { color: '#fff', fontWeight: '700' }

@@ -622,7 +622,7 @@ const ProductList = ({ navigation, route }) => {
 
   const cartCtx = useContext(CartContext);
 
-  const renderProduct = ({ item }) => {
+  const renderProduct = ({ item, index }) => {
     // render placeholder invisible card to keep layout
     if (item && item.__empty) {
       return <View style={[styles.gridCard, styles.gridCardEmpty]} />;
@@ -640,6 +640,7 @@ const ProductList = ({ navigation, route }) => {
         ]}
         onPress={() => navigation.navigate('ProductForm', { product: item })}
         activeOpacity={0.8}
+        testID={`product-item-${item && (item._id || item.id) ? (item._id || item.id) : `idx-${index}`}`}
       >
   <View style={[styles.mediaWrap, isMobile ? styles.mediaWrapMobile : {}]}>
           <Image
@@ -717,7 +718,9 @@ const ProductList = ({ navigation, route }) => {
               {(!(user && user.role === 'admin')) && (
                 <TouchableOpacity
                   style={[styles.addToCart, isMobile ? styles.addToCartMobile : {}]} 
-                  onPress={() => { cartCtx.addToCart(item); emit('openQuickCart'); }}>
+                  onPress={() => { cartCtx.addToCart(item); emit('openQuickCart'); }}
+                  testID={`product-add-${item && (item._id || item.id) ? (item._id || item.id) : `idx-${index}`}`}
+                >
                   <Text style={[styles.addToCartText, isMobile ? styles.addToCartTextMobile : {}]}>Add to Cart</Text>
                 </TouchableOpacity>
               )}

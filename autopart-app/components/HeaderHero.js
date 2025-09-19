@@ -27,10 +27,10 @@ const HeaderHero = ({ navigation }) => {
         <Text style={[styles.heroTitle, { fontSize: heroTitleSize }]}>Build Your Dream Car Today.{"\n"}Now 15% Off On All Items.</Text>
 
         <View style={styles.heroCtas}>
-          <TouchableOpacity style={styles.ctaPrimary} onPress={() => navigation.navigate('Products')}>
+          <TouchableOpacity style={styles.ctaPrimary} onPress={() => navigation.navigate('Products')} testID="cta-shop-now">
             <Text style={styles.ctaPrimaryText}>Shop Now</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.ctaOutlined} onPress={() => navigation.navigate('Products')}>
+          <TouchableOpacity style={styles.ctaOutlined} onPress={() => navigation.navigate('Products')} testID="cta-view-categories">
             <Text style={styles.ctaOutlinedText}>View Categories</Text>
           </TouchableOpacity>
         </View>

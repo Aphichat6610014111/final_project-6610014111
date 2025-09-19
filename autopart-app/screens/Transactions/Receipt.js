@@ -525,6 +525,28 @@ const Receipt = ({ route, navigation }) => {
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={styles.itemPrice}>{formatUSD(price)}</Text>
                   <Text style={styles.cardText}>รวม {formatUSD(lineTotal)}</Text>
+                  {/* Review button: navigates to a Review screen for this product */}
+                  <TouchableOpacity
+                    style={styles.reviewButton}
+                    onPress={() => {
+                      const product = (it.product && (it.product._id || it.product.id)) ? it.product : null;
+                      const pid = (it.product && (it.product._id || it.product.id)) || it.productId || it._id || it.id || null;
+                      if (navigation && typeof navigation.navigate === 'function') {
+                        const params = product ? { product } : (pid ? { product } : {});
+                        // The app has an existing 'Reviews' screen — navigate there
+                        try {
+                          navigation.navigate('Reviews', params);
+                        } catch (e) {
+                          console.warn('Navigation to Reviews failed', e);
+                          Alert.alert('ไม่สามารถนำทาง', 'ไม่สามารถไปยังหน้ารีวิวได้');
+                        }
+                      } else {
+                        Alert.alert('ไม่สามารถนำทาง', 'ไม่พบ navigation object');
+                      }
+                    }}
+                  >
+                    <Text style={styles.reviewText}>รีวิวสินค้า</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             );
@@ -589,6 +611,8 @@ const Receipt = ({ route, navigation }) => {
     totalValue: { color: '#fff', fontWeight: '900' },
     ctaButton: { backgroundColor: '#0B7A3E', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 6, marginBottom: 12, alignItems: 'center' },
     ctaText: { color: '#fff', fontWeight: '800' },
+    reviewButton: { marginTop: 8, backgroundColor: 'transparent', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6 },
+    reviewText: { color: 'rgba(255,255,255,0.9)', fontWeight: '700' },
   });
 
   export default Receipt;

@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Dimensions } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import AuthContext from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -13,16 +14,6 @@ const Orders = ({ navigation }) => {
   const debuggerHost = (Constants.manifest && (Constants.manifest.debuggerHost || Constants.manifest.packagerOpts?.host)) || '';
   const devHost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
   const API_BASE = `http://${devHost}:5000`;
-
-  // Robust image resolver adapted from ProductForm.getImageSource
-  const makeImageUrl = (u) => {
-    if (!u) return null;
-    const s = String(u);
-    if (s.startsWith('http://') || s.startsWith('https://')) return s;
-    // relative path -> prepend API host
-    const path = s.startsWith('/') ? s : `/${s}`;
-    return `${API_BASE}${path}`;
-  };
 
   const getImageSource = (u, productItem = null) => {
     // if explicit resource id (require) passed
@@ -155,7 +146,12 @@ const Orders = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>คำสั่งซื้อของฉัน</Text>
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginRight: 12 }}>
+          <Icon name="arrow-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.title}>คำสั่งซื้อของฉัน</Text>
+      </View>
       {loading ? <Text style={styles.info}>กำลังโหลด...</Text> : (
         <FlatList
           data={orders}

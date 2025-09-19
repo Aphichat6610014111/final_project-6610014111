@@ -1319,6 +1319,46 @@ app.post('/api/products/:productId/reviews/:reviewId/helpful', async (req, res) 
   }
 });
 
+// Update a review (author or admin) - allow editing comment (and name) with ownership checks
+app.put('/api/products/:productId/reviews/:reviewId', authenticateToken, async (req, res) => {
+  try {
+    const { productId: productIdParam, reviewId } = req.params;
+    const { comment, name, rating } = req.body || {};
+
+    const review = await Review.findById(reviewId);
+    if (!review) return res.status(404).json({ success: false, message: 'Review not found' });
+
+    // basic ownership checks (same as delete)
+    const isAuthor = review.userId && req.user && review.userId.toString() === req.user._id.toString();
+    const isAdmin = req.user && req.user.role === 'admin';
+    let isAuthorByName = false;
+    try {
+      const reviewerName = (review.author || '').toString().toLowerCase().trim();
+      const currentName = ((req.user && (req.user.name || req.user.username)) || '').toString().toLowerCase().trim();
+      if (reviewerName && currentName && reviewerName === currentName) {
+        isAuthorByName = true;
+        console.warn(`edit authorized by name match for review ${reviewId}: ${reviewerName} === ${currentName}`);
+      }
+    } catch (e) { /* ignore */ }
+
+    if (!isAuthor && !isAdmin && !isAuthorByName) return res.status(403).json({ success: false, message: 'Not authorized to edit this review' });
+
+    // perform update (only allow comment and name edits here to avoid rating tampering by legacy clients)
+    let modified = false;
+    if (typeof comment === 'string') { review.comment = comment.trim(); modified = true; }
+    if (typeof name === 'string') { review.author = name.trim(); modified = true; }
+    // rating edits are not applied here unless you explicitly want to support them
+    if (modified) {
+      await review.save();
+    }
+
+    res.json({ success: true, review });
+  } catch (error) {
+    console.error('edit review error', error);
+    res.status(500).json({ success: false, message: 'Failed to edit review', error: error.message });
+  }
+});
+
 // Delete a review (author or admin)
 app.delete('/api/products/:productId/reviews/:reviewId', authenticateToken, async (req, res) => {
   try {
@@ -1333,16 +1373,27 @@ app.delete('/api/products/:productId/reviews/:reviewId', authenticateToken, asyn
       console.warn(`ProductId param mismatch for delete: param=${productIdParam} review.productId=${actualProductId}`);
     }
 
-    // allow only author or admin to delete
+    // allow only author (by id) or admin to delete
     const isAuthor = review.userId && req.user && review.userId.toString() === req.user._id.toString();
     const isAdmin = req.user && req.user.role === 'admin';
-    if (!isAuthor && !isAdmin) return res.status(403).json({ success: false, message: 'Not authorized to delete this review' });
+    // fallback: if review has only an author string (legacy/local), allow if author name matches current user name/username (case-insensitive)
+    let isAuthorByName = false;
+    try {
+      const reviewerName = (review.author || '').toString().toLowerCase().trim();
+      const currentName = ((req.user && (req.user.name || req.user.username)) || '').toString().toLowerCase().trim();
+      if (reviewerName && currentName && reviewerName === currentName) {
+        isAuthorByName = true;
+        console.warn(`delete authorized by name match for review ${reviewId}: ${reviewerName} === ${currentName}`);
+      }
+    } catch (e) { /* ignore */ }
+
+    if (!isAuthor && !isAdmin && !isAuthorByName) return res.status(403).json({ success: false, message: 'Not authorized to delete this review' });
 
     await Review.deleteOne({ _id: reviewId });
 
     // recompute product aggregates (rating and count) using actualProductId
     const agg = await Review.aggregate([
-      { $match: { productId: mongoose.Types.ObjectId(actualProductId) } },
+      { $match: { productId: new mongoose.Types.ObjectId(actualProductId) } },
       { $group: { _id: '$productId', avg: { $avg: '$rating' }, count: { $sum: 1 } } }
     ]);
     const product = await Product.findById(actualProductId);

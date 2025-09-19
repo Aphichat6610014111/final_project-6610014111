@@ -236,6 +236,7 @@ const RegisterScreen = ({ navigation }) => {
                   style={styles.input}
                   placeholder="ชื่อผู้ใช้"
                   value={formData.username}
+                  testID="register-username"
                   onChangeText={(value) => setFormData({...formData, username: value})}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -259,6 +260,7 @@ const RegisterScreen = ({ navigation }) => {
                   style={styles.input}
                   placeholder="อีเมล"
                   value={formData.email}
+                  testID="register-email"
                   onChangeText={(value) => setFormData({...formData, email: value})}
                   autoCapitalize="none"
                   keyboardType="email-address"
@@ -283,6 +285,7 @@ const RegisterScreen = ({ navigation }) => {
                   style={styles.input}
                   placeholder="รหัสผ่าน"
                   value={formData.password}
+                  testID="register-password"
                   onChangeText={(value) => setFormData({...formData, password: value})}
                   secureTextEntry={!showPassword}
                   autoCorrect={false}
@@ -336,6 +339,7 @@ const RegisterScreen = ({ navigation }) => {
                   style={styles.input}
                   placeholder="ยืนยันรหัสผ่าน"
                   value={formData.confirmPassword}
+                  testID="register-confirmPassword"
                   onChangeText={(value) => setFormData({...formData, confirmPassword: value})}
                   secureTextEntry={!showConfirmPassword}
                   autoCorrect={false}
@@ -360,6 +364,7 @@ const RegisterScreen = ({ navigation }) => {
                 style={[styles.registerButton, loading && styles.registerButtonDisabled]}
                 onPress={handleRegister}
                 disabled={loading}
+                testID="register-submit"
               >
                 <LinearGradient
                   colors={loading ? ['#ccc', '#999'] : ['#dc2626', '#7f1d1d']}

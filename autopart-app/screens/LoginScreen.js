@@ -185,6 +185,7 @@ const LoginScreen = ({ navigation }) => {
                 <TextInput
                   style={styles.input}
                   placeholder="อีเมล"
+                  testID="login-email"
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
@@ -205,6 +206,7 @@ const LoginScreen = ({ navigation }) => {
                 <TextInput
                   style={styles.input}
                   placeholder="รหัสผ่าน"
+                  testID="login-password"
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
@@ -230,6 +232,7 @@ const LoginScreen = ({ navigation }) => {
                 style={[styles.loginButton, loading && styles.loginButtonDisabled]}
                 onPress={handleLogin}
                 disabled={loading}
+                testID="login-submit"
               >
                 <LinearGradient
                   colors={loading ? ['#ccc', '#999'] : ['#dc2626', '#7f1d1d']}
@@ -246,7 +249,7 @@ const LoginScreen = ({ navigation }) => {
               {/* Register Link */}
               <View style={styles.registerContainer}>
                 <Text style={styles.registerText}>ยังไม่มีบัญชี? </Text>
-                <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                <TouchableOpacity onPress={() => navigation.navigate('Register')} testID="go-register">
                   <Text style={styles.registerLink}>สมัครสมาชิก</Text>
                 </TouchableOpacity>
                 

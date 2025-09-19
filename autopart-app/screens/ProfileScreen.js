@@ -263,12 +263,12 @@ const ProfileScreen = () => {
           </View>
 
           <View style={styles.profileRow}>
-            <TouchableOpacity onPress={() => setShowAvatarModal(true)} style={styles.profileAvatarWrap}>
+            <TouchableOpacity onPress={() => setShowAvatarModal(true)} style={styles.profileAvatarWrap} accessibilityRole="button" accessibilityLabel="Open avatar viewer">
               {user?.avatar ? (
-                <ImageBackground source={{ uri: user.avatar && user.avatar.startsWith('/') ? apiUrl(user.avatar) : user.avatar }} style={styles.profileAvatar} imageStyle={{ borderRadius: 44 }}>
+                <ImageBackground source={{ uri: user.avatar && user.avatar.startsWith('/') ? apiUrl(user.avatar) : user.avatar }} style={styles.profileAvatar} imageStyle={{ borderRadius: 55 }}>
                 </ImageBackground>
               ) : (
-                <View style={styles.profileAvatarPlaceholder}><Icon name="person" size={40} color="#fff" /></View>
+                <View style={styles.profileAvatarPlaceholder}><Icon name="person" size={48} color="#fff" /></View>
               )}
             </TouchableOpacity>
 
@@ -278,13 +278,13 @@ const ProfileScreen = () => {
               <View style={styles.actionRow}>
                 {user ? (
                   <>
-                    <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={() => navigation.navigate('EditProfile')}><Text style={styles.btnText}>แก้ไขโปรไฟล์</Text></TouchableOpacity>
-                    <TouchableOpacity style={[styles.btn, styles.btnOutline]} onPress={confirmLogout}><Text style={[styles.btnText, styles.btnOutlineText]}>ออกจากระบบ</Text></TouchableOpacity>
+                    <TouchableOpacity style={[styles.btn, styles.btnPrimary, styles.btnLarge]} onPress={() => navigation.navigate('EditProfile')} accessibilityRole="button"><Text style={styles.btnText}>แก้ไขโปรไฟล์</Text></TouchableOpacity>
+                    <TouchableOpacity style={[styles.btn, styles.btnOutline, styles.btnLarge]} onPress={confirmLogout} accessibilityRole="button"><Text style={[styles.btnText, styles.btnOutlineText]}>ออกจากระบบ</Text></TouchableOpacity>
                   </>
                 ) : (
                   <>
-                    <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={() => navigation.navigate('Login')}><Text style={styles.btnText}>เข้าสู่ระบบ</Text></TouchableOpacity>
-                    <TouchableOpacity style={[styles.btn, styles.btnOutline]} onPress={() => navigation.navigate('Register')}><Text style={[styles.btnText, styles.btnOutlineText]}>สมัครสมาชิก</Text></TouchableOpacity>
+                    <TouchableOpacity style={[styles.btn, styles.btnPrimary, styles.btnLarge]} onPress={() => navigation.navigate('Login')} accessibilityRole="button"><Text style={styles.btnText}>เข้าสู่ระบบ</Text></TouchableOpacity>
+                    <TouchableOpacity style={[styles.btn, styles.btnOutline, styles.btnLarge]} onPress={() => navigation.navigate('Register')} accessibilityRole="button"><Text style={[styles.btnText, styles.btnOutlineText]}>สมัครสมาชิก</Text></TouchableOpacity>
                   </>
                 )}
               </View>
@@ -295,7 +295,7 @@ const ProfileScreen = () => {
 
       {/* Content cards */}
       <View style={styles.contentWrapper}>
-        <View style={styles.card}>
+        <View style={[styles.card, styles.cardShadow]}>
           <Text style={styles.cardTitle}>สรุปคำสั่งซื้อ</Text>
           {loadingOrders ? (
             <Text style={styles.cardText}>กำลังโหลดคำสั่งซื้อ...</Text>
@@ -362,15 +362,19 @@ const ProfileScreen = () => {
           )}
         </View>
 
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('AddressPayments')}>
-          <Text style={styles.cardTitle}>ที่อยู่ & การชำระเงิน</Text>
+        <TouchableOpacity style={[styles.card, styles.cardShadow]} onPress={() => navigation.navigate('AddressPayments')} activeOpacity={0.8}>
+          <View style={styles.menuRowInner}>
+            <Text style={styles.cardTitle}>ที่อยู่ & การชำระเงิน</Text>
+            <Icon name="chevron-right" size={20} color="#fff" />
+          </View>
           <Text style={styles.cardText}>จัดการที่อยู่และบัตรของคุณ</Text>
         </TouchableOpacity>
 
-        <View style={styles.cardLast}>
+        <View style={[styles.cardLast, styles.cardShadow]}>
           <Text style={styles.cardTitle}>ตั้งค่าบัญชี</Text>
-          <TouchableOpacity style={styles.rowItem} onPress={() => navigation.navigate('EditProfile')}>
+          <TouchableOpacity style={styles.rowItem} onPress={() => navigation.navigate('EditProfile')} activeOpacity={0.8}>
             <Text style={styles.rowItemText}>แก้ไขข้อมูลส่วนตัว</Text>
+            <Icon name="chevron-right" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
       </View>
@@ -481,7 +485,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   statusText: {
-    color: '#34C759',
+    color: '#ff6b6b',
     fontSize: 12,
     fontWeight: '600',
     marginLeft: 4,
@@ -609,14 +613,13 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
     marginRight: 18,
   },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 6, marginBottom: 12 },
   headerBack: { padding: 6 },
   headerBackText: { color: '#fff' },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
   profileRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
-  profileAvatarWrap: { marginRight: 12 },
-  profileAvatar: { width: 88, height: 88, borderRadius: 44, overflow: 'hidden' },
-  profileAvatarPlaceholder: { width: 88, height: 88, borderRadius: 44, backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },
+  profileAvatarWrap: { marginRight: 16 },
+  profileAvatar: { width: 110, height: 110, borderRadius: 55, overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(255,255,255,0.06)' },
+  profileAvatarPlaceholder: { width: 110, height: 110, borderRadius: 55, backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },
   editBadge: { position: 'absolute', right: 6, bottom: 6, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
   editBadgeText: { color: '#fff', fontSize: 10 },
   profileMeta: { flex: 1 },
@@ -624,17 +627,20 @@ const styles = StyleSheet.create({
   profileEmail: { color: 'rgba(255,255,255,0.7)', marginTop: 4 },
   actionRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
   btn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
-  btnPrimary: { backgroundColor: '#0B7A3E', marginRight: 8 },
+  btnPrimary: { backgroundColor: '#ff6b6b', marginRight: 8 },
   btnOutline: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'transparent' },
   btnText: { color: '#fff', fontWeight: '700' },
   btnOutlineText: { color: '#fff' },
-  contentWrapper: { paddingHorizontal: 20, paddingTop: 18 },
+  btnLarge: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10 },
+  
   card: { backgroundColor: 'rgba(255,255,255,0.03)', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)' },
+  cardShadow: { shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6, borderRadius: 12, borderColor: 'rgba(255,255,255,0.03)' },
   cardLast: { backgroundColor: 'rgba(255,255,255,0.03)', padding: 16, borderRadius: 12, marginBottom: 30, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)' },
   cardTitle: { color: '#fff', fontWeight: '800', marginBottom: 6 },
   cardText: { color: 'rgba(255,255,255,0.7)' },
   rowItem: { paddingVertical: 10 },
   rowItemText: { color: '#fff' },
+  menuRowInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   userInfoLarge: { flex: 1, justifyContent: 'center' },
   userNameLarge: { color: '#fff', fontSize: 28, fontWeight: '800', marginBottom: 6 },
   badgesRow: { flexDirection: 'row', gap: 12 },
@@ -654,11 +660,11 @@ const styles = StyleSheet.create({
   infoItemSmall: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   infoTextSmall: { color: 'rgba(255,255,255,0.65)', fontSize: 13, marginLeft: 8 },
   emptyText: { color: 'rgba(255,255,255,0.5)', marginTop: 8 },
-  ctaButton: { backgroundColor: '#0B7A3E', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 6, marginBottom: 12, alignItems: 'center' },
+  ctaButton: { backgroundColor: '#ff6b6b', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 6, marginBottom: 12, alignItems: 'center' },
   ctaText: { color: '#fff', fontWeight: '800' },
-  ctaOutline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#0B7A3E' },
-  ctaOutlineText: { color: '#0B7A3E' },
-  joinButton: { backgroundColor: '#00C853' },
+  ctaOutline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#ff6b6b', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 6, marginTop: 6 },
+  ctaOutlineText: { color: '#ff6b6b' },
+  joinButton: { backgroundColor: '#ff6b6b', paddingVertical: 14, paddingHorizontal: 20, borderRadius: 8, marginTop: 10, alignItems: 'center' },
   logoutAction: { backgroundColor: '#FF4757' },
 });
 

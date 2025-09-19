@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useContext } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions, ActivityIndicator, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions, ActivityIndicator, TextInput, Alert, Share } from 'react-native';
+import { Modal, Pressable } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import axios from 'axios';
 import { apiUrl } from '../utils/apiConfig';
@@ -19,6 +20,30 @@ export default function Reviews({ route, navigation }) {
   const [sortBy, setSortBy] = useState('most_relevant');
   const [showRatingMenu, setShowRatingMenu] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
+  // Options modal state
+  const [optionsVisible, setOptionsVisible] = useState(false);
+  const [optionsTargetId, setOptionsTargetId] = useState(null);
+  const [optionsPosition, setOptionsPosition] = useState(null);
+  const [deletingReviewId, setDeletingReviewId] = useState(null);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleteModalTarget, setDeleteModalTarget] = useState(null);
+  const [deleteModalInfo, setDeleteModalInfo] = useState({});
+
+  // helper to determine ownership in a robust way
+  const isOwnerOf = (rev) => {
+    if (!rev || !user || !token) return false;
+    try {
+      // admin always owner
+      if (user.role === 'admin') return true;
+      const uid = String(user._id || user.id || '').trim();
+      const revUid = String(rev.userId || rev.user || '').trim();
+      if (uid && revUid && uid === revUid) return true;
+      const uname = (user.name || user.username || '').toLowerCase().trim();
+      const revAuthor = (rev.author || rev.name || '').toLowerCase().trim();
+      if (uname && revAuthor && (uname === revAuthor)) return true;
+    } catch (e) { console.warn('isOwnerOf check failed', e); }
+    return false;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -104,20 +129,82 @@ export default function Reviews({ route, navigation }) {
   };
 
   const deleteReview = async (reviewId, reviewUserId) => {
+    // If this is a local-only review (created client-side with fake id), just remove locally
+    if (!/^[0-9a-fA-F]{24}$/.test(String(reviewId))) {
+      console.debug('deleteReview: non-ObjectId id detected, removing locally only', { reviewId });
+      setReviews(prev => prev.filter(r => r._id !== reviewId));
+      Alert.alert('ลบเรียบร้อย', 'รีวิวที่ยังไม่ได้บันทึกบนเซิร์ฟเวอร์ถูกลบแล้ว (local only)');
+      return;
+    }
     // only attempt delete if we have a token
     if (!token) {
       Alert.alert('ต้องเข้าสู่ระบบ', 'เฉพาะผู้เขียนหรือผู้ดูแลระบบที่เข้าสู่ระบบสามารถลบรีวิวได้');
+      console.warn('delete blocked: no token', { reviewId, productId: product._id || product.id });
       return;
     }
+    setDeletingReviewId(reviewId);
     try {
       setLoading(true);
-  await axios.delete(apiUrl(`/api/products/${product._id || product.id}/reviews/${reviewId}`), { headers: { Authorization: `Bearer ${token}` } });
+      console.debug('Attempting to delete review', { productId: product._id || product.id, reviewId, reviewUserId, hasToken: !!token, userId: user && (user._id || user.id) });
+      const res = await axios.delete(apiUrl(`/api/products/${product._id || product.id}/reviews/${reviewId}`), { headers: { Authorization: `Bearer ${token}` } });
+      // remove locally
       setReviews(prev => prev.filter(r => r._id !== reviewId));
       Alert.alert('สำเร็จ', 'ลบรีวิวเรียบร้อย');
+      console.debug('Delete response', res && res.status, res && res.data);
+      // re-fetch reviews to keep in sync with server canonical state
+      try {
+        const fres = await axios.get(apiUrl(`/api/products/${product._id || product.id}/reviews`));
+        setReviews(fres?.data?.reviews || fres?.data || []);
+      } catch (re) { console.warn('re-fetch reviews after delete failed', re); }
     } catch (e) {
-      console.warn('delete review failed', e?.message || e);
-      Alert.alert('ข้อผิดพลาด', 'ไม่สามารถลบรีวิวได้');
-    } finally { setLoading(false); }
+      console.warn('delete review failed', e);
+      const status = e?.response?.status;
+      const data = e?.response?.data;
+      // log owner vs current user for debugging when 403
+      if (status === 403) {
+        const rv = reviews.find(r => String(r._id) === String(reviewId));
+        console.debug('403 delete details', { reviewId, reviewUserId: rv && (rv.userId || rv.user), reviewAuthor: rv && (rv.author || rv.name), currentUserId: user && (user._id || user.id), currentUserName: user && (user.name || user.username) });
+        Alert.alert('ไม่มีสิทธิ์', data?.message || 'คุณไม่มีสิทธิ์ลบรีวิวนี้ (เฉพาะผู้เขียนหรือผู้ดูแลระบบ)');
+      } else if (status === 401) {
+        Alert.alert('เซสชันหมดอายุ', 'กรุณาเข้าสู่ระบบใหม่', [ { text: 'เข้าสู่ระบบ', onPress: () => navigation.navigate('Login') }, { text: 'ยกเลิก' } ]);
+      } else if (status === 404) {
+        Alert.alert('ไม่พบรีวิว', 'รีวิวนี้ไม่มีบนเซิร์ฟเวอร์แล้ว — จะรีเฟรชรายการ', [ { text: 'ตกลง' } ]);
+        try {
+          const fres = await axios.get(apiUrl(`/api/products/${product._id || product.id}/reviews`));
+          setReviews(fres?.data?.reviews || fres?.data || []);
+        } catch (re) { console.warn('re-fetch after 404 failed', re); }
+      } else {
+        const msg = status ? `Server returned ${status}: ${JSON.stringify(data)}` : (e?.message || 'Unknown error');
+        Alert.alert('ข้อผิดพลาด', `ไม่สามารถลบรีวิวได้: ${msg}`);
+      }
+    } finally {
+      setLoading(false);
+      setDeletingReviewId(null);
+    }
+  };
+
+  // Edit a review (optimistic)
+  const editReview = async (reviewId, newComment) => {
+    if (!token) {
+      Alert.alert('ต้องเข้าสู่ระบบ', 'เฉพาะผู้เขียนหรือผู้ดูแลระบบที่เข้าสู่ระบบสามารถแก้ไขรีวิวได้');
+      return;
+    }
+    if (!newComment || !newComment.trim()) { Alert.alert('ข้อผิดพลาด', 'ข้อความรีวิวต้องไม่ว่าง'); return; }
+    const prev = reviews;
+    try {
+      // optimistic update
+      setReviews(prevReviews => prevReviews.map(r => r._id === reviewId ? { ...r, comment: newComment.trim(), isEditing: false } : r));
+      // call server
+      if (product._id || product.id) {
+        await axios.put(apiUrl(`/api/products/${product._id || product.id}/reviews/${reviewId}`), { comment: newComment.trim() }, { headers: { Authorization: `Bearer ${token}` } });
+      }
+      Alert.alert('สำเร็จ', 'แก้ไขรีวิวเรียบร้อย');
+    } catch (e) {
+      console.warn('edit review failed', e?.message || e);
+      // rollback
+      setReviews(prev);
+      Alert.alert('ข้อผิดพลาด', 'ไม่สามารถแก้ไขรีวิวได้');
+    }
   };
 
   const ratingAvg = (reviews.length ? (reviews.reduce((s, r) => s + (Number(r.rating)||0), 0) / reviews.length) : (product.rating || 0));
@@ -127,9 +214,17 @@ export default function Reviews({ route, navigation }) {
     count: reviews.filter(r => Math.round(Number(r.rating)||0) === star).length
   }));
 
-  const numColumns = 2;
-  const { width } = Dimensions.get('window');
-  const cardWidth = Math.floor((width - 48) / numColumns);
+  // responsive layout: adapt to screen width
+  const [windowWidth, setWindowWidth] = useState(Dimensions.get('window').width);
+  useEffect(() => {
+    const onChange = ({ window }) => setWindowWidth(window.width);
+    const sub = Dimensions.addEventListener ? Dimensions.addEventListener('change', onChange) : Dimensions.addEventListener('change', onChange);
+    return () => { try { sub?.remove?.(); } catch (e) { /* some RN versions return unsubscribe fn */ } };
+  }, []);
+
+  const isMobile = windowWidth < 700; // threshold: small screens
+  const numColumns = isMobile ? 1 : 2;
+  const cardWidth = Math.floor((windowWidth - (isMobile ? 32 : 48)) / numColumns);
 
   // helper: map sort key to label
   function sortLabel(key) {
@@ -180,8 +275,83 @@ export default function Reviews({ route, navigation }) {
 
   return (
     <View style={styles.page}>
-      <View style={styles.headerRow}>
-        <View style={styles.leftCol}>
+      {/* In-app delete confirmation modal */}
+      <Modal visible={deleteModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ width: 320, backgroundColor: '#111', padding: 16, borderRadius: 8 }}>
+            <Text style={{ color: '#fff', fontWeight: '700', marginBottom: 8 }}>Confirm delete</Text>
+            <Text style={{ color: '#ddd', marginBottom: 12 }}>{`Delete review?\nproductId=${deleteModalInfo.productId || ''}\nreviewId=${deleteModalInfo.reviewId || ''}\nhasToken=${!!deleteModalInfo.hasToken}`}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+              <TouchableOpacity style={{ marginRight: 12 }} onPress={() => { setDeleteModalVisible(false); setDeleteModalTarget(null); setDeleteModalInfo({}); }}><Text style={{ color: '#ccc' }}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity style={{ backgroundColor: '#ff6b6b', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6 }} onPress={async () => {
+                const id = deleteModalTarget;
+                setDeleteModalVisible(false);
+                setDeleteModalTarget(null);
+                setDeleteModalInfo({});
+                try { await deleteReview(id); } catch (err) { console.warn('delete from modal failed', err); }
+              }}><Text style={{ color: '#111', fontWeight: '700' }}>{deletingReviewId === deleteModalTarget ? 'Deleting...' : 'Delete'}</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      {/* Anchored popover menu */}
+      {optionsVisible && optionsPosition && (
+        <View style={[styles.popoverWrap, { top: optionsPosition.y - 8, left: Math.max(8, optionsPosition.x - 170) }]} pointerEvents="box-none">
+          <View style={styles.popoverCard}>
+            {(() => {
+              const target = reviews.find(r => r._id === optionsTargetId);
+              // ownership: admin OR matching userId OR matching author/name to signed-in user
+              const isOwner = isOwnerOf(target);
+              const onClose = () => { setOptionsVisible(false); setOptionsTargetId(null); setOptionsPosition(null); };
+              const copyLink = async () => {
+                try {
+                  const link = product && (product._id || product.id) ? apiUrl(`/products/${product._id || product.id}`) : '';
+                  if (link) await Share.share({ message: link });
+                  else Alert.alert('Info', 'No link available');
+                } catch (e) { console.warn('share failed', e); }
+                onClose();
+              };
+              return (
+                <>
+                  <TouchableOpacity style={styles.popoverRow} onPress={copyLink}>
+                    <Icon name="link" size={18} color="#333" />
+                    <Text style={styles.popoverText}>Copy Link</Text>
+                  </TouchableOpacity>
+                  {isOwner && (
+                    <TouchableOpacity style={styles.popoverRow} onPress={() => { setReviews(prev => prev.map(r => r._id === optionsTargetId ? { ...r, isEditing: true, _editDraft: r.comment || r.body || '' } : r)); onClose(); }}>
+                      <Icon name="edit" size={18} color="#333" />
+                      <Text style={styles.popoverText}>Edit Review</Text>
+                    </TouchableOpacity>
+                  )}
+                  {isOwner && <View style={styles.popoverDivider} />}
+                  {isOwner ? (
+                    <TouchableOpacity style={styles.popoverRow} onPress={() => {
+                      onClose();
+                      setDeleteModalTarget(optionsTargetId);
+                      setDeleteModalInfo({ productId: product._id || product.id, reviewId: optionsTargetId, hasToken: !!token });
+                      setDeleteModalVisible(true);
+                    }}>
+                      {deletingReviewId === optionsTargetId ? (
+                        <ActivityIndicator size="small" color="#ff6b6b" />
+                      ) : (
+                        <Icon name="delete" size={18} color="#ff6b6b" />
+                      )}
+                      <Text style={[styles.popoverText, { color: '#ff6b6b' }]}>{deletingReviewId === optionsTargetId ? 'Deleting...' : 'Delete Review'}</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={styles.popoverRow} onPress={() => { onClose(); Alert.alert('Report', 'ขอบคุณ เราจะตรวจสอบรีวิวนี้'); }}>
+                      <Icon name="report" size={18} color="#333" />
+                      <Text style={styles.popoverText}>Report</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      )}
+      <View style={[styles.headerRow, isMobile ? styles.headerRowMobile : {}]}>
+        <View style={[styles.leftCol, isMobile ? styles.leftColMobile : {}]}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginRight: 12 }}> 
               <Icon name="arrow-back" size={22} color="#fff" />
@@ -232,22 +402,24 @@ export default function Reviews({ route, navigation }) {
           )}
         </View>
 
-        <View style={styles.rightCol}>
-          <Text style={styles.smallTitle}>Rating breakdown</Text>
-          <View style={{ marginTop: 8 }}>
-            {breakdown.map(b => {
-              const total = Math.max(1, reviews.length);
-              const pct = Math.round((b.count / total) * 100);
-              return (
-                <View key={b.star} style={styles.breakRow}>
-                  <Text style={styles.breakLabel}>{b.star} stars</Text>
-                  <View style={styles.breakTrack}><View style={[styles.breakFill, { width: `${pct}%` }]} /></View>
-                  <Text style={styles.breakCount}>{b.count}</Text>
-                </View>
-              );
-            })}
+        {!isMobile && (
+          <View style={styles.rightCol}>
+            <Text style={styles.smallTitle}>Rating breakdown</Text>
+            <View style={{ marginTop: 8 }}>
+              {breakdown.map(b => {
+                const total = Math.max(1, reviews.length);
+                const pct = Math.round((b.count / total) * 100);
+                return (
+                  <View key={b.star} style={styles.breakRow}>
+                    <Text style={styles.breakLabel}>{b.star} stars</Text>
+                    <View style={styles.breakTrack}><View style={[styles.breakFill, { width: `${pct}%` }]} /></View>
+                    <Text style={styles.breakCount}>{b.count}</Text>
+                  </View>
+                );
+              })}
+            </View>
           </View>
-        </View>
+        )}
       </View>
 
       <View style={styles.filterRow}>
@@ -287,16 +459,30 @@ export default function Reviews({ route, navigation }) {
 
       {loading ? <ActivityIndicator size="large" color="#FF3B30" style={{ marginTop: 20 }} /> : (
         <FlatList
+          key={`cols-${numColumns}`}
           data={filteredSortedReviews(reviews, ratingFilter, sortBy)}
           keyExtractor={(r, i) => (r.id || r._id || String(i))}
           numColumns={numColumns}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 80 }}
-          columnWrapperStyle={{ justifyContent: 'space-between', marginBottom: 12 }}
+          contentContainerStyle={{ paddingHorizontal: isMobile ? 12 : 16, paddingBottom: 80 }}
+          columnWrapperStyle={isMobile ? undefined : { justifyContent: 'space-between', marginBottom: 12 }}
           renderItem={({ item }) => (
             <View style={[styles.reviewCard, { width: cardWidth }]}>
               <View style={styles.cardHeaderRow}>
                 <Text style={styles.cardAuthor}>{item.author || item.name || 'Anonymous'}</Text>
-                <Text style={styles.cardDate}>{item.date || ''}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.cardDate}>{item.date || ''}</Text>
+                  {/* Top-right options button (ellipsis) */}
+                  <TouchableOpacity
+                    style={styles.optionsBtn}
+                    onPressIn={(e) => {
+                      const { pageX, pageY } = e.nativeEvent || {};
+                      setOptionsPosition({ x: pageX, y: pageY });
+                    }}
+                    onPress={() => { setOptionsTargetId(item._id); setOptionsVisible(true); }}
+                  >
+                    <Icon name="more-vert" size={18} color="#999" />
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -308,7 +494,7 @@ export default function Reviews({ route, navigation }) {
               <TouchableOpacity><Text style={styles.showMore}>Show More ▾</Text></TouchableOpacity>
               <View style={styles.cardActions}>
                 <Text style={styles.helpful}>Was this helpful?</Text>
-                <TouchableOpacity style={styles.actionBtn} onPress={() => markHelpful(item._1 || item._id || item.id)}><Icon name="thumb-up-off-alt" size={14} color="#ccc" /><Text style={styles.actionText}> {item.helpfulCount || 0} Yes</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => markHelpful(item._id || item.id)}><Icon name="thumb-up-off-alt" size={14} color="#ccc" /><Text style={styles.actionText}> {item.helpfulCount || 0} Yes</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.actionBtn} onPress={() => {
                   // open a prompt style reply (simple flow)
                   const replyText = '';
@@ -317,10 +503,20 @@ export default function Reviews({ route, navigation }) {
                   // We'll use a lightweight approach: add a temporary property to show reply input
                   setReviews(prev => prev.map(r => r._id === item._id ? { ...r, showReply: !(r.showReply) } : r));
                 }}><Icon name="reply" size={14} color="#ccc" /><Text style={styles.actionText}> Reply</Text></TouchableOpacity>
-                {(token && ((item.userId && user && String(item.userId) === String(user._id)) || (user && user.role === 'admin'))) && (
-                  <TouchableOpacity style={[styles.actionBtn, { marginLeft: 12 }]} onPress={() => deleteReview(item._id)}>
-                    <Icon name="delete" size={14} color="#ff6b6b" />
-                    <Text style={[styles.actionText, { color: '#ff6b6b' }]}> Delete</Text>
+                {isOwnerOf(item) && (
+                    <TouchableOpacity style={[styles.actionBtn, { marginLeft: 12 }]} onPress={() => {
+                    // Open in-app modal confirmation
+                    if (!token) { Alert.alert('ต้องเข้าสู่ระบบ', 'กรุณาเข้าสู่ระบบก่อนลบรีวิว'); console.warn('delete blocked: no token'); return; }
+                    setDeleteModalTarget(item._id);
+                    setDeleteModalInfo({ productId: product._id || product.id, reviewId: item._id, hasToken: !!token });
+                    setDeleteModalVisible(true);
+                  }}>
+                    {deletingReviewId === item._id ? (
+                      <ActivityIndicator size="small" color="#ff6b6b" />
+                    ) : (
+                      <Icon name="delete" size={14} color="#ff6b6b" />
+                    )}
+                    <Text style={[styles.actionText, { color: '#ff6b6b' }]}>{deletingReviewId === item._id ? ' Deleting' : ' Delete'}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -334,6 +530,19 @@ export default function Reviews({ route, navigation }) {
                       submitReply(item._id, rv._pendingReply, reviewName);
                       setReviews(prev => prev.map(r => r._id === item._id ? { ...r, showReply: false, _pendingReply: '' } : r));
                     }}><Text style={{ color: '#fff' }}>Reply</Text></TouchableOpacity>
+                  </View>
+                </View>
+              )}
+              {/* Inline edit UI */}
+              {item.isEditing && (
+                <View style={{ marginTop: 8 }}>
+                  <TextInput placeholder="แก้ไขรีวิว..." placeholderTextColor="#666" style={[styles.formTextarea, { height: 80 }]} onChangeText={text => setReviews(prev => prev.map(r => r._id === item._id ? { ...r, _editDraft: text } : r))} value={item._editDraft || ''} />
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 6 }}>
+                    <TouchableOpacity style={{ marginRight: 8 }} onPress={() => setReviews(prev => prev.map(r => r._id === item._id ? { ...r, isEditing: false, _editDraft: undefined } : r))}><Text style={{ color: '#ccc' }}>Cancel</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.formSubmit} onPress={() => {
+                      const rv = reviews.find(r => r._id === item._id);
+                      editReview(item._id, (rv && rv._editDraft) || '');
+                    }}><Text style={{ color: '#fff' }}>Save</Text></TouchableOpacity>
                   </View>
                 </View>
               )}
@@ -352,6 +561,26 @@ export default function Reviews({ route, navigation }) {
           )}
         />
       )}
+
+      {/* On mobile, render rating breakdown below the list */}
+      {isMobile && (
+        <View style={[styles.rightCol, styles.rightColMobile, { marginTop: 12 }]}> 
+          <Text style={styles.smallTitle}>Rating breakdown</Text>
+          <View style={{ marginTop: 8 }}>
+            {breakdown.map(b => {
+              const total = Math.max(1, reviews.length);
+              const pct = Math.round((b.count / total) * 100);
+              return (
+                <View key={b.star} style={styles.breakRow}>
+                  <Text style={styles.breakLabel}>{b.star} stars</Text>
+                  <View style={styles.breakTrack}><View style={[styles.breakFill, { width: `${pct}%` }]} /></View>
+                  <Text style={styles.breakCount}>{b.count}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -359,8 +588,11 @@ export default function Reviews({ route, navigation }) {
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#000', paddingTop: 24 },
   headerRow: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 12 },
+  headerRowMobile: { flexDirection: 'column', paddingHorizontal: 12 },
   leftCol: { flex: 1, paddingRight: 12 },
+  leftColMobile: { paddingRight: 0 },
   rightCol: { width: 360, paddingLeft: 12 },
+  rightColMobile: { width: '100%', paddingLeft: 0 },
   title: { color: '#fff', fontSize: 20, fontWeight: '800' },
   ratingNumber: { color: '#ddd', marginLeft: 10 },
   subText: { color: '#bbb', marginTop: 8 },
@@ -394,4 +626,10 @@ const styles = StyleSheet.create({
   dropdownItem: { paddingVertical: 10, paddingHorizontal: 12 },
   dropdownText: { color: '#ddd' },
   filterBtn: { paddingHorizontal: 6 }
+  ,optionsBtn: { marginLeft: 8, padding: 6 }
+  ,popoverWrap: { position: 'absolute', zIndex: 9999 }
+  ,popoverCard: { width: 220, backgroundColor: '#fff', borderRadius: 6, paddingVertical: 8, paddingHorizontal: 8, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 6, elevation: 6 }
+  ,popoverRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 6 }
+  ,popoverText: { color: '#222', marginLeft: 12 }
+  ,popoverDivider: { height: 1, backgroundColor: '#eee', marginVertical: 6 }
 });
