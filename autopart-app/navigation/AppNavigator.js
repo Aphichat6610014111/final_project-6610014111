@@ -12,6 +12,9 @@ import RegisterScreen from '../screens/RegisterScreen';
 import HomeScreen from '../screens/HomeScreen';
 import AdminDashboard from '../screens/AdminDashboard';
 import AdminOrders from '../screens/Admin/AdminOrders';
+import AdminReviews from '../screens/Admin/AdminReviews';
+import AdminUsers from '../screens/Admin/AdminUsers';
+import ManageProducts from '../screens/Admin/ManageProducts';
 import ProductList from '../screens/Products/ProductList';
 import ProductForm from '../screens/Products/ProductForm';
 import AddToCartScreen from '../screens/Products/AddToCartScreen';
@@ -72,6 +75,8 @@ function MainTabs() {
   );
 }
 
+const adminRoutes = new Set(['AdminDashboard','AdminOrders','AdminUsers','AdminReviews','ManageProducts']);
+
 const AppNavigator = () => {
   const { user, isLoading } = useContext(AuthContext);
 
@@ -83,8 +88,29 @@ const AppNavigator = () => {
     );
   }
 
+  // onStateChange callback will run whenever navigation state changes; used to toggle body.admin on web
+  const handleStateChange = (state) => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    try {
+      // find the active route name by walking state
+      let route = state && state.routes && state.routes[state.index];
+      // deep dive for nested navigators
+      while (route && route.state && route.state.index != null) {
+        route = route.state.routes[route.state.index];
+      }
+      const name = route && route.name;
+      if (name && adminRoutes.has(name)) {
+        document.body.classList.add('admin');
+      } else {
+        document.body.classList.remove('admin');
+      }
+    } catch (e) {
+      // no-op
+    }
+  };
+
   return (
-  <NavigationContainer ref={navigationRef}>
+  <NavigationContainer ref={navigationRef} onStateChange={handleStateChange}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {/* Always expose MainTabs so Home is the default landing (even when not authenticated) */}
         <Stack.Screen name="Main" component={MainTabs} />
@@ -100,6 +126,9 @@ const AppNavigator = () => {
         <Stack.Screen name="Track" component={Track} />
         <Stack.Screen name="AddressPayments" component={AddressPaymentsScreen} />
   <Stack.Screen name="AdminOrders" component={AdminOrders} />
+  <Stack.Screen name="AdminUsers" component={AdminUsers} />
+  <Stack.Screen name="AdminReviews" component={AdminReviews} />
+  <Stack.Screen name="ManageProducts" component={ManageProducts} />
 
         {/* Service screens (admin/privileged). Keep them registered but we'll preserve access checks in those screens if needed */}
         <Stack.Screen name="Fulfillment" component={Fulfillment} />

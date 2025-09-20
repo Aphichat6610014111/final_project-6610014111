@@ -171,6 +171,7 @@ const ProductForm = ({ route, navigation }) => {
   const [modalImage, setModalImage] = useState(null);
   // Mobile sidebar state (slide-in panel)
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [buyNowModalVisible, setBuyNowModalVisible] = useState(false);
 
   // Admin form state
   const [isSaving, setIsSaving] = useState(false);
@@ -253,14 +254,8 @@ const ProductForm = ({ route, navigation }) => {
   const onBuyNow = () => {
     // require authentication before buy-now flow
     if (!user || !token) {
-      Alert.alert(
-        'กรุณาเข้าสู่ระบบ',
-        'คุณต้องเข้าสู่ระบบก่อนจึงจะสามารถชำระเงินได้',
-        [
-          { text: 'ยกเลิก', style: 'cancel' },
-          { text: 'เข้าสู่ระบบ', onPress: () => navigation.navigate('Login') }
-        ]
-      );
+      // show modal prompting to login (web-friendly UI)
+      setBuyNowModalVisible(true);
       return;
     }
     // Add the single item to the shared cart and navigate to the Cart screen for checkout
@@ -993,6 +988,24 @@ const ProductForm = ({ route, navigation }) => {
         </View>
       </Modal>
 
+      {/* Buy Now requires login modal */}
+      <Modal visible={buyNowModalVisible} transparent animationType="fade" onRequestClose={() => setBuyNowModalVisible(false)}>
+        <View style={styles.buyModalBackdrop}>
+          <View style={styles.buyModalBox}>
+            <Text style={styles.buyModalTitle}>กรุณาเข้าสู่ระบบ</Text>
+            <Text style={styles.buyModalMessage}>คุณต้องเข้าสู่ระบบก่อนจึงจะสามารถชำระเงินได้</Text>
+            <View style={styles.buyModalBtnRow}>
+              <TouchableOpacity style={[styles.buyModalBtn, styles.buyModalSecondaryBtn]} onPress={() => setBuyNowModalVisible(false)}>
+                <Text style={styles.buyModalBtnText}>ยกเลิก</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.buyModalBtn} onPress={() => { setBuyNowModalVisible(false); navigation.navigate('Login'); }}>
+                <Text style={styles.buyModalBtnText}>เข้าสู่ระบบ</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Footer removed */}
       {/* Quick Cart Sidebar (shared component) */}
       <QuickCartSidebar visible={showMobileSidebar} onClose={() => setShowMobileSidebar(false)} />
@@ -1145,6 +1158,15 @@ const styles = StyleSheet.create({
   modalCloseButton: { marginTop: 18, backgroundColor: 'rgba(255,59,48,0.9)', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 24 },
   scrollTopBtn: { position: 'absolute', right: 18, bottom: 90, width: 52, height: 52, borderRadius: 26, backgroundColor: '#ff4d36', alignItems: 'center', justifyContent: 'center', elevation: 8 },
   scrollTopText: { color: '#fff', fontSize: 22, fontWeight: '800' },
+  /* Buy Now modal styles */
+  buyModalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  buyModalBox: { backgroundColor: '#0b0b0b', padding: 20, borderRadius: 8, width: '100%', maxWidth: 420 },
+  buyModalTitle: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 8 },
+  buyModalMessage: { color: '#ddd', fontSize: 14, marginBottom: 12 },
+  buyModalBtnRow: { flexDirection: 'row', justifyContent: 'flex-end' },
+  buyModalBtn: { backgroundColor: '#ff4d36', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 6, marginLeft: 8 },
+  buyModalSecondaryBtn: { backgroundColor: 'rgba(255,77,54,0.12)' },
+  buyModalBtnText: { color: '#fff', fontWeight: '700' },
   /* Mobile sidebar styles */
   sidebarOverlay: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
   mobileSidebar: { position: 'absolute', right: -320, top: 0, bottom: 0, width: 320, backgroundColor: '#0b0b0b', borderLeftWidth: 1, borderLeftColor: '#222', padding: 16, zIndex: 60, shadowColor: '#000', shadowOffset: { width: -4, height: 0 }, shadowOpacity: 0.5, shadowRadius: 8, elevation: 20, transitionProperty: 'right' },

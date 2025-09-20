@@ -23,7 +23,8 @@ const NavBar = ({ onOpenCart }) => {
         end={{ x: 1, y: 0 }}
       >
         <View style={styles.left}>
-          <Text style={styles.siteTitle}>AUTOPARTS STORE</Text>
+          {/* Add className-like text wrapper for web CSS targeting */}
+          <Text style={styles.siteTitle} className="site-title">AUTOPARTS STORE</Text>
         </View>
 
         <View style={styles.right}>

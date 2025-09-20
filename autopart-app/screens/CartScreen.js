@@ -1,5 +1,5 @@
 import React, { useContext, useMemo, useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Image, Dimensions, Modal, Pressable, Platform } from 'react-native';
 import axios from 'axios';
 import Constants from 'expo-constants';
 import { API_BASE, apiUrl } from '../utils/apiConfig';
@@ -15,6 +15,7 @@ const CartScreen = ({ navigation, route }) => {
 
   const [localItems, setLocalItems] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [emptyModalVisible, setEmptyModalVisible] = useState(false);
   const [width, setWidth] = useState(Dimensions.get('window').width);
   useEffect(() => {
     const sub = Dimensions.addEventListener?.('change', ({ window }) => setWidth(window.width));
@@ -185,7 +186,17 @@ const CartScreen = ({ navigation, route }) => {
       <TouchableOpacity><Text style={styles.estimate}>Estimate Delivery</Text></TouchableOpacity>
       <View style={styles.summaryRow}><Text style={[styles.summaryLabel, { fontWeight: '800' }]}>Total</Text><Text style={[styles.summaryValue, { fontWeight: '800' }]}>${subtotal.toFixed(2)}</Text></View>
 
-      <TouchableOpacity style={styles.checkoutBtn} onPress={() => navigation.navigate('Transaction', { cart: (sourceItems || []).map(i => ({ productId: i._id || i.productId, name: i.name, price: i.price, quantity: i.qty || i.quantity })) })}>
+      <TouchableOpacity
+        style={[styles.checkoutBtn, (!sourceItems || (sourceItems || []).length === 0) && styles.checkoutBtnDisabled]}
+        onPress={() => {
+          if (!sourceItems || (sourceItems || []).length === 0) {
+            setEmptyModalVisible(true);
+            return;
+          }
+          navigation.navigate('Transaction', { cart: (sourceItems || []).map(i => ({ productId: i._id || i.productId, name: i.name, price: i.price, quantity: i.qty || i.quantity })) });
+        }}
+        disabled={!sourceItems || (sourceItems || []).length === 0}
+      >
         <Text style={styles.checkoutText}>Checkout</Text>
       </TouchableOpacity>
 
@@ -245,6 +256,26 @@ const CartScreen = ({ navigation, route }) => {
 
         {!isMobile && renderSummary()}
       </View>
+
+      {/* Empty cart alert modal */}
+      <Modal
+        visible={emptyModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setEmptyModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>ไม่มีสินค้าในตะกร้า</Text>
+            <Text style={styles.modalMessage}>โปรดเลือกสินค้าก่อนชำระ</Text>
+            <View style={{ marginTop: 18, flexDirection: 'row', justifyContent: 'flex-end' }}>
+              <Pressable style={styles.modalBtn} onPress={() => setEmptyModalVisible(false)}>
+                <Text style={styles.modalBtnText}>ตกลง</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -286,6 +317,15 @@ const styles = StyleSheet.create({
   estimate: { color: '#ff4d36', marginTop: 8, textDecorationLine: 'underline' },
   checkoutBtn: { marginTop: 20, backgroundColor: '#ff4d36', paddingVertical: 14, borderRadius: 24, alignItems: 'center' },
   checkoutText: { color: '#fff', fontWeight: '800' },
+  checkoutBtnDisabled: { backgroundColor: 'rgba(255,77,54,0.35)' },
+
+  /* Modal styles */
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalBox: { backgroundColor: '#0b0b0b', padding: 20, borderRadius: 8, width: '100%', maxWidth: 420 },
+  modalTitle: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 8 },
+  modalMessage: { color: '#ddd', fontSize: 14 },
+  modalBtn: { backgroundColor: '#ff4d36', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 6 },
+  modalBtnText: { color: '#fff', fontWeight: '700' },
 });
 
 export default CartScreen;

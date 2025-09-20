@@ -27,6 +27,12 @@ if (!fs.existsSync(usersImagesDir)) {
   fs.mkdirSync(usersImagesDir, { recursive: true });
 }
 
+// Ensure images/products directory exists (for product images)
+const productsImagesDir = path.join(__dirname, 'images', 'products');
+if (!fs.existsSync(productsImagesDir)) {
+  fs.mkdirSync(productsImagesDir, { recursive: true });
+}
+
 // Multer setup for avatar uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -39,6 +45,19 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
+
+// Multer storage for product images
+const productStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, productsImagesDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname) || '.jpg';
+    const fname = `${Date.now()}-${Math.random().toString(36).substring(2,8)}${ext}`;
+    cb(null, fname);
+  }
+});
+const productUpload = multer({ storage: productStorage, limits: { fileSize: 8 * 1024 * 1024 } });
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/autopart_db', {
@@ -1024,6 +1043,45 @@ app.get('/api/orders/mine', authenticateToken, async (req, res) => {
 });
 
 // Update user (Admin only)
+// Change user role (Admin only)
+app.patch('/api/users/:id/role', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    let { role } = req.body || {};
+    // Accept 'user' as alias for 'employee' (schema uses 'employee')
+    if (role === 'user') role = 'employee';
+    const allowed = ['admin', 'employee'];
+    if (!role || !allowed.includes(role)) {
+      return res.status(400).json({ success: false, message: 'Invalid role', allowed });
+    }
+    user.role = role;
+    try {
+      await user.save();
+    } catch (saveErr) {
+      console.error('Error saving user role', saveErr);
+      return res.status(500).json({ success: false, message: 'Failed to save role', error: saveErr.message });
+    }
+    // Return sanitized user (using toJSON)
+    res.json({ success: true, message: 'Role updated', data: { user: user.toJSON() } });
+  } catch (error) {
+    console.error('Role update error', error);
+    res.status(500).json({ success: false, message: 'Failed to update role', error: error.message });
+  }
+});
+// Get single user by id (Admin only)
+app.get('/api/users/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, data: { user: user.toJSON ? user.toJSON() : user } });
+  } catch (err) {
+    console.error('Get user by id error', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch user', error: err.message });
+  }
+});
 app.put('/api/users/:id',
   authenticateToken,
   requireAdmin,
@@ -1071,14 +1129,36 @@ app.delete('/api/users/:id', authenticateToken, requireAdmin, async (req, res) =
       });
     }
 
-    // Soft delete
-    user.isActive = false;
-    await user.save();
+    // Prevent admin from deleting themselves
+    if (req.user && req.user.id && req.user.id.toString() === user._id.toString()) {
+      return res.status(400).json({ success: false, message: 'Cannot delete your own account' });
+    }
 
-    res.json({
-      success: true,
-      message: 'User deleted successfully'
-    });
+    // Prevent deleting the last admin
+    if (user.role === 'admin') {
+      const adminCount = await User.countDocuments({ role: 'admin' });
+      if (adminCount <= 1) {
+        return res.status(400).json({ success: false, message: 'Cannot delete the last admin user' });
+      }
+    }
+
+    // Remove avatar file from disk if exists and structured avatar present
+    try {
+      if (user.avatar && user.avatar.filename) {
+        const avatarPath = path.join(__dirname, 'images', 'users', user.avatar.filename);
+        if (fs.existsSync(avatarPath)) {
+          fs.unlinkSync(avatarPath);
+        }
+      }
+    } catch (fsErr) {
+      console.error('Failed to remove avatar file', fsErr);
+      // continue with delete even if file removal fails
+    }
+
+    // Hard delete the user
+    await User.deleteOne({ _id: user._id });
+
+    res.json({ success: true, message: 'User deleted successfully' });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -1415,6 +1495,125 @@ app.delete('/api/products/:productId/reviews/:reviewId', authenticateToken, asyn
   }
 });
 
+// Admin: list all reviews across products
+app.get('/api/admin/reviews', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.productId) {
+      // accept string id
+      filter.productId = req.query.productId;
+    }
+    const reviews = await Review.find(filter).sort({ createdAt: -1 }).populate('productId', 'name').lean();
+    res.json({ success: true, data: { reviews } });
+  } catch (error) {
+    console.error('Get admin reviews error', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch reviews', error: error.message });
+  }
+});
+
+// Admin: reply to a review (adds reply into review.replies)
+app.post('/api/admin/reviews/:id/replies', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const review = await Review.findById(req.params.id);
+    if (!review) return res.status(404).json({ success: false, message: 'Review not found' });
+    const { comment } = req.body;
+    if (!comment || !String(comment).trim()) return res.status(400).json({ success: false, message: 'Reply comment required' });
+    const reply = { userId: req.user ? req.user._id : null, author: (req.user && (req.user.name || req.user.username)) || 'Admin', comment: String(comment).trim(), createdAt: new Date() };
+    review.replies = review.replies || [];
+    review.replies.push(reply);
+    await review.save();
+    res.status(201).json({ success: true, message: 'Reply added', reply });
+  } catch (error) {
+    console.error('Admin add reply error', error);
+    res.status(500).json({ success: false, message: 'Failed to add reply', error: error.message });
+  }
+});
+
+// Admin: delete a reply from a review
+app.delete('/api/admin/reviews/:reviewId/replies/:replyId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { reviewId, replyId } = req.params;
+    console.log('[debug] Delete reply requested', { reviewId, replyId });
+    const review = await Review.findById(reviewId);
+    if (!review) return res.status(404).json({ success: false, message: 'Review not found' });
+    const before = review.replies || [];
+    // normalize replyId: if it's a JSON-like string or contains an ObjectId, try to extract hex
+    let normalized = replyId;
+    try {
+      // if someone passed a JSON object string like '{"$oid":"..."}', parse it
+      if (typeof replyId === 'string' && (replyId.trim().startsWith('{') || replyId.trim().startsWith('"{'))) {
+        try {
+          const parsed = JSON.parse(replyId);
+          if (parsed && parsed.$oid) normalized = parsed.$oid;
+        } catch (e) {
+          // ignore parse
+        }
+      }
+    } catch (e) {}
+    // fallback: extract first 24-hex substring
+    if (typeof normalized === 'string' && !/^[a-fA-F0-9]{24}$/.test(normalized)) {
+      const m = normalized.match(/[a-fA-F0-9]{24}/);
+      if (m) normalized = m[0];
+    }
+    console.log('[debug] Normalized replyId ->', normalized);
+    const idx = before.findIndex(rp => {
+      try {
+        if (rp._id && String(rp._id) === String(normalized)) return true;
+      } catch (e) {}
+      try {
+        if (rp.createdAt && String(rp.createdAt) === String(normalized)) return true;
+      } catch (e) {}
+      return false;
+    });
+    if (idx === -1) return res.status(404).json({ success: false, message: 'Reply not found' });
+    // remove reply
+    review.replies.splice(idx, 1);
+    await review.save();
+    res.json({ success: true, message: 'Reply deleted' });
+  } catch (err) {
+    console.error('Delete reply error', err);
+    res.status(500).json({ success: false, message: 'Failed to delete reply', error: err.message });
+  }
+});
+
+// Admin: delete a reply from a review (JSON body variant) - more robust for clients
+app.post('/api/admin/replies/delete', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { reviewId, replyId } = req.body || {};
+    if (!reviewId || !replyId) return res.status(400).json({ success: false, message: 'reviewId and replyId required' });
+    console.log('[debug] Delete reply (body) requested', { reviewId, replyId });
+    const review = await Review.findById(reviewId);
+    if (!review) return res.status(404).json({ success: false, message: 'Review not found' });
+    const before = review.replies || [];
+    let normalized = replyId;
+    try {
+      if (typeof replyId === 'string' && (replyId.trim().startsWith('{') || replyId.trim().startsWith('"{'))) {
+        try {
+          const parsed = JSON.parse(replyId);
+          if (parsed && parsed.$oid) normalized = parsed.$oid;
+        } catch (e) {}
+      }
+    } catch (e) {}
+    if (typeof normalized === 'string' && !/^[a-fA-F0-9]{24}$/.test(normalized)) {
+      const m = normalized.match(/[a-fA-F0-9]{24}/);
+      if (m) normalized = m[0];
+    }
+    console.log('[debug] Normalized replyId (body) ->', normalized);
+    const idx = before.findIndex(rp => {
+      try { if (rp._id && String(rp._id) === String(normalized)) return true; } catch (e) {}
+      try { if (rp.createdAt && String(rp.createdAt) === String(normalized)) return true; } catch (e) {}
+      return false;
+    });
+    if (idx === -1) return res.status(404).json({ success: false, message: 'Reply not found' });
+    review.replies.splice(idx, 1);
+    await review.save();
+    res.json({ success: true, message: 'Reply deleted' });
+  } catch (err) {
+    console.error('Delete reply (body) error', err);
+    res.status(500).json({ success: false, message: 'Failed to delete reply', error: err.message });
+  }
+});
+
 // Create product
 app.post('/api/products',
   authenticateToken,
@@ -1452,6 +1651,57 @@ app.post('/api/products',
     }
   }
 );
+
+// Upload product image (multipart) and save path to product.imageUrl
+app.post('/api/products/:id/image', authenticateToken, productUpload.single('image'), async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
+
+    // remove previous image file if present
+    if (product.imageUrl) {
+      try {
+        const parts = product.imageUrl.split('/');
+        const oldFilename = parts[parts.length - 1];
+        const oldPath = path.join(productsImagesDir, oldFilename);
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      } catch (e) { /* ignore */ }
+    }
+
+    const rel = `/images/products/${req.file.filename}`;
+    product.imageUrl = rel;
+    await product.save();
+    res.json({ success: true, message: 'Image uploaded', data: { product } });
+  } catch (err) {
+    console.error('Product image upload error', err);
+    res.status(500).json({ success: false, message: 'Failed to upload image', error: err.message });
+  }
+});
+
+// Delete product image
+app.delete('/api/products/:id/image', authenticateToken, async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+
+    if (product.imageUrl) {
+      try {
+        const parts = product.imageUrl.split('/');
+        const filename = parts[parts.length - 1];
+        const filePath = path.join(productsImagesDir, filename);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      } catch (e) { console.warn('Failed to remove product image file', e); }
+    }
+
+    product.imageUrl = null;
+    await product.save();
+    res.json({ success: true, message: 'Product image removed', data: { product } });
+  } catch (err) {
+    console.error('Delete product image error', err);
+    res.status(500).json({ success: false, message: 'Failed to delete image', error: err.message });
+  }
+});
 
 // Update product
 app.put('/api/products/:id',

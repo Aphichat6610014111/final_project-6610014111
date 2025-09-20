@@ -284,10 +284,8 @@ const HomeScreen = ({ navigation }) => {
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
 
-    {/* HERO - fill one viewport */}
-    <View style={[styles.heroWrap, { height: windowHeight, overflow: 'hidden' }]}>
-      <HeaderHero navigation={navigation} />
-    </View>
+  {/* HERO - HeaderHero now can optionally fill one viewport when fullPage is true */}
+  <HeaderHero navigation={navigation} fullPage={true} />
 
   {/* BODY - image background only for body (use solid black background) */}
   <View style={styles.bodyBg}>

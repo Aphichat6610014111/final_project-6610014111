@@ -85,7 +85,12 @@ const AdminOrders = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Admin Orders</Text>
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Text style={styles.backText}>‹ Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.header}>Admin Orders</Text>
+      </View>
       {loading ? <ActivityIndicator /> : (
         <FlatList data={orders} keyExtractor={o => (o._id || o.id)} renderItem={renderItem} ListEmptyComponent={<Text style={styles.empty}>No pending orders</Text>} />
       )}
@@ -95,7 +100,10 @@ const AdminOrders = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 12, backgroundColor: '#0a0a0a' },
-  header: { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 12 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  backBtn: { marginRight: 8, paddingHorizontal: 6, paddingVertical: 4 },
+  backText: { color: '#fff', fontSize: 16 },
+  header: { fontSize: 20, fontWeight: '800', color: '#fff' },
   item: { backgroundColor: 'rgba(255,255,255,0.03)', padding: 12, borderRadius: 8, marginBottom: 12, flexDirection: 'row', alignItems: 'center' },
   title: { color: '#fff', fontWeight: '700' },
   meta: { color: 'rgba(255,255,255,0.6)', marginTop: 4 },

@@ -1,36 +1,110 @@
 /* Global web styles to remove default white margins and ensure dark background */
+/* Mobile-first global styles */
 html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
-  background: #000; /* use true black background per request */
+  background: #000; /* use true black background */
   color: #fff;
-  /* use system fonts */
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-overflow-scrolling: touch;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Page container for product pages to center content and limit width on large screens */
+/* Narrow/mobile layout defaults: full width stacking, larger tap targets */
 .product-page-container {
   display: block;
   margin: 0 auto;
-  max-width: 1200px;
-  width: 95%;
+  width: 100%;
+  padding: 0 12px;
+  box-sizing: border-box;
+  max-width: 1000px; /* allow narrower on mobile */
 }
 
-/* Make native inputs transparent and remove default outlines on web */
-input, textarea {
+/* Inputs and textareas - mobile friendly */
+input, textarea, button {
   background: transparent !important;
   color: inherit !important;
-  border-radius: 0 !important;
+  border-radius: 6px !important;
   outline: none !important;
   box-shadow: none !important;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
-/* Remove scrollbar gap on some browsers */
-body {
-  -webkit-overflow-scrolling: touch;
+/* Utility: visually-hidden for accessibility */
+.sr-only { position: absolute !important; height: 1px; width: 1px; overflow: hidden; clip: rect(1px, 1px, 1px, 1px); }
+
+/* Buttons and CTAs: larger on mobile */
+button, .btn { touch-action: manipulation; padding: 12px 18px; font-size: 16px; border-radius: 10px; }
+
+/* Hero/video container should be responsive by default */
+.hero { width: 100%; height: auto; }
+
+/* Admin pages should keep desktop styles: add .admin on body to disable mobile overrides where needed */
+body.admin .product-page-container { max-width: 1200px; width: 95%; padding: 0; }
+body.admin button, body.admin .btn { padding: 8px 12px; font-size: 14px; border-radius: 4px; }
+
+/* Desktop/large screens - enhance layout */
+@media (min-width: 900px) {
+  .product-page-container { width: 95%; max-width: 1200px; padding: 0 24px; }
+  button, .btn { font-size: 14px; }
 }
 
-/* No custom @font-face - use system fonts to remove bundled font usage */
+/* Small tweaks for very small screens */
+@media (max-width: 360px) {
+  .site-title { font-size: 18px !important; }
+  .heroTitle { font-size: 28px !important; }
+}
+
+/* Lock the viewport width to iPhone 14 Pro Max (430px) when the browser is narrow.
+   This centers the app and prevents layouts from shrinking below the intended mobile design.
+   Admin pages are exempted by the body.admin rule. */
+@media (max-width: 430px) {
+  /* create a centered page frame. Cover common expo/react-native-web wrappers as well. */
+  html, body { display: flex; justify-content: center; }
+  /* Expo and react-native-web inject several wrapper divs. Target common IDs and classes to ensure all pages are centered and locked. */
+  #root, #app, .root, .expo-root, .main-root, .app-root, [data-root] {
+    display: flex !important;
+    justify-content: center !important;
+  }
+
+  /* Make the actual app frame fixed at 430px so every page appears as that device width */
+  .product-page-container,
+  .hero,
+  .hero-content,
+  .site,
+  #root > div,
+  #root > div > div,
+  .expo-view,
+  .app-container,
+  .app-root,
+  .main-root {
+    width: 430px !important;
+    min-width: 430px !important;
+    max-width: 430px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* ensure body background fills the remaining space while app is centered */
+  body { background-color: #000; }
+}
+
+  /* Ensure the hero video fits within the responsive hero container on web */
+  .hero video, .hero .expo-av, .hero video::-webkit-media-controls { 
+    width: 100% !important; 
+    height: 100% !important; 
+    max-height: 100% !important; 
+    object-fit: cover !important; 
+  }
+
+  /* Also ensure any absolute-fill video elements are contained */
+  .hero .heroVideo, .hero .hero-video, .hero .video-wrapper { max-height: 100% !important; width: 100% !important; object-fit: cover !important; }
+
+/* Exempt admin pages from the viewport lock so admin stays full-width */
+body.admin html, body.admin body { display: block !important; }
+body.admin #root, body.admin #app, body.admin .root, body.admin .expo-root { display: block !important; }
+body.admin .product-page-container, body.admin .hero, body.admin .hero-content, body.admin .site, body.admin .app-root { min-width: 0 !important; width: auto !important; max-width: 1200px !important; }
 
 /* NOTE: For native apps (iOS/Android) you must bundle the Noto Sans Thai font and register it with the project (e.g., via react-native.config.js or expo's asset linking). */

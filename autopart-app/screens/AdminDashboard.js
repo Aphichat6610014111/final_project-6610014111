@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 const AdminDashboard = ({ navigation }) => {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Admin Dashboard (Wireframe)</Text>
+      <Text style={styles.title}>Admin Dashboard</Text>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Overview</Text>
@@ -12,23 +12,26 @@ const AdminDashboard = ({ navigation }) => {
       </View>
 
       <View style={styles.sectionRow}>
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('ProductForm')}>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('ManageProducts')}>
           <Text style={styles.cardTitle}>Manage Products</Text>
           <Text style={styles.cardDesc}>Add, edit or remove products</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Reviews')}>
-          <Text style={styles.cardTitle}>Manage Reviews</Text>
-          <Text style={styles.cardDesc}>Moderate customer feedback</Text>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('AdminReviews')}>
+          <Text style={styles.cardTitle}>Manage Reviews (All)</Text>
+          <Text style={styles.cardDesc}>Moderate reviews across all products</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('AdminOrders')}>
           <Text style={styles.cardTitle}>Pending Orders</Text>
           <Text style={styles.cardDesc}>View and approve pending orders</Text>
         </TouchableOpacity>
+          <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('AdminUsers')}>
+            <Text style={styles.cardTitle}>User Management</Text>
+            <Text style={styles.cardDesc}>Create or modify employee accounts and roles.</Text>
+          </TouchableOpacity>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>User Management</Text>
-        <Text style={styles.sectionText}>Create or modify employee accounts and roles.</Text>
+          {/* User Management section moved to card above */}
       </View>
     </View>
   );
